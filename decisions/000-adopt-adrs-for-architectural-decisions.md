@@ -79,4 +79,3 @@ For detailed writing guidelines, see [ADR-GUIDE.md](../ADR-GUIDE.md). To create 
 ### Neutral
 ⚖️ Does not replace JIRA, Slack, or meetings; complements them by capturing the outcome
 ⚖️ ADR quality will vary; the template and review process help but cannot guarantee thoroughness
-⚖️ Open ADR PRs should be regularly surfaced in architecture calls to ensure timely review and avoid stale proposals
