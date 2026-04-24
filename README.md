@@ -31,6 +31,7 @@ git push origin adr/my-decision
 
 - **[ADR-TEMPLATE.md](ADR-TEMPLATE.md)** - Copy this to start a new ADR
 - **[ADR-GUIDE.md](ADR-GUIDE.md)** - Complete guide for writing ADRs
+- **[ADR-APPROVAL-GUIDELINES.md](ADR-APPROVAL-GUIDELINES.md)** - How ADRs are reviewed and approved
 - **[ADR-AI-GUIDE.md](ADR-AI-GUIDE.md)** - Using AI to help draft ADRs
 - **[decisions/](decisions/)** - All accepted ADRs
 
@@ -44,10 +45,12 @@ ADRs follow GitHub PR workflow. **The PR state IS the status** - no status field
 
 **Workflow:**
 1. Write ADR, open PR
-2. Team reviews and discusses on PR
-3. Merge PR when approved (ADR is now accepted)
+2. Announce in team channel (e.g., `#rhdh-team`) with review timeline (minimum 1 week)
+3. Team reviews and discusses on PR
+4. Author facilitates discussion and updates ADR based on feedback
+5. Author merges PR when consensus reached (ADR is now accepted)
 
-See [ADR-GUIDE.md](ADR-GUIDE.md#adr-lifecycle-github-pr-workflow) for details.
+See [ADR-GUIDE.md](ADR-GUIDE.md#adr-lifecycle-github-pr-workflow) for writing details and [ADR-APPROVAL-GUIDELINES.md](ADR-APPROVAL-GUIDELINES.md) for review/approval process.
 
 ## When to Write an ADR
 
