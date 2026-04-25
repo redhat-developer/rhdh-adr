@@ -13,7 +13,6 @@ As the Backstage CRD evolves, we need answers to:
 **Current state:**
 - Backstage CRD evolved from v1alpha1 through v1alpha5
 - Previous practice: increment version for new API features (aggressive versioning)
-- No defined policy for version deprecation or removal
 - CRD spec growing with each version increment
 
 **Triggering incident (v1.9.x):**
@@ -21,6 +20,10 @@ As the Backstage CRD evolves, we need answers to:
 - Upgrade failures: "risk of data loss updating backstages.rhdh.redhat.com: new CRD removes version v1alpha1 that is listed in storedVersions"
 - Emergency fix: re-added with `served: false`
 - Revealed need for formal version management strategy
+
+More context in the following JIRA issues:
+- https://redhat.atlassian.net/browse/RHDHSUPP-349
+- https://redhat.atlassian.net/browse/RHDHBUGS-292
 
 **Who is impacted:**
 - **Users upgrading operator**: Need seamless upgrades without manual intervention
@@ -170,4 +173,3 @@ Operator v3.0  → v1alpha6 (only when breaking change actually needed)
 - CRD versioning: https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definition-versioning/
 - Storage migrator: https://github.com/kubernetes-sigs/kube-storage-version-migrator
 - OpenShift storage migration: https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/storage_apis/storageversionmigration-migration-k8s-io-v1alpha1
-- Investigation details: `.scripts/__new_features/crd-version-upgrade-investigation.md`
