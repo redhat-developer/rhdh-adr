@@ -14,7 +14,7 @@
 **Who is impacted:**
 - **Air-gap/disconnected users**: Cannot pre-mirror plugin images because catalog content is unknown until pod runtime
 - **Operators/SREs**: Cannot validate plugin configurations early in reconciliation loop
-- **Multi-catalog users**: Cannot combine RHDH catalog with custom or third-party plugin catalogs
+- **Multi-catalog users**: Cannot combine dynamic-plugins.default.yaml files from primary catalog with custom or third-party plugin catalogs
 - **Platform teams**: No cluster-wide catalog reuse across multiple Backstage instances
 
 **Constraints:**
@@ -35,10 +35,10 @@ Introduce **DevHubPluginCatalog** as a cluster-scoped Custom Resource Definition
 
 2. **Catalog lifecycle**:
    - Fetch catalog from OCI source (`spec.source.oci`)
-   - Extract `dynamic-plugins.default.yaml` from catalog
+   - Extract `dynamic-plugins.default.yaml` (if any) from catalog
    - If `spec.mirror` specified
      - Apply mirror configuration
-     - Generate two ConfigMaps per catalog (to simplify using: mirrored + original URLs)
+     - Generate two ConfigMaps per catalog (to simplify usage with mirrored and original URLs)
 
 3. **Primary RHDH catalog auto-creation**:
     - Default DevHubPluginCatalog resource included in operator installation
@@ -51,8 +51,8 @@ Introduce **DevHubPluginCatalog** as a cluster-scoped Custom Resource Definition
    - Extra catalogs MAY include `dynamic-plugins.default.yaml` (optional)
 
 5. **ConfigMap generation**:
-   - `<catalog-name>-catalog`: Plugin config with mirrored URLs (used at runtime)
-   - `<catalog-name>-catalog-original`: Plugin config with original URLs (for image discovery)
+   - `<catalog-name>-catalog`: Plugin config with original or mirrored (if 'spec.mirror' specified) URLs (used at runtime)
+   - `<catalog-name>-catalog-original`: Plugin config with original URLs (for image discovery, generated only if 'spec.mirror' specified)
 
 **Example:**
 
@@ -75,7 +75,8 @@ spec:
         addPrefix: "github"
 
 status:
-  phase: Ready | Fetching | Failed
+  # Allowed values: Ready, Fetching, Failed
+  phase: Ready
   lastFetched: "2026-04-15T10:30:00Z"
   pluginCount: 45
   error: "..."
@@ -83,25 +84,15 @@ status:
 
 ## Alternatives Considered
 
-### Alternative 1: Namespace-Scoped DevHubPluginCatalog
-- **Approach**: Make catalogs namespace-scoped instead of cluster-scoped
-- **Rejected because**:
-  - Duplicates catalog resources across namespaces
-  - Harder to share catalogs between Backstage instances in different namespaces
-  - Air-gap mirroring would need per-namespace configuration
-  - Increases resource overhead (N catalogs for N namespaces)
-  - Doesn't align with catalog as "cluster-wide shared infrastructure" pattern
-
-### Alternative 2: Git-Synced Catalog via GitHub Workflow
+### Alternative 1: Git-Synced Catalog via GitHub Workflow
 - **Approach**: GitHub workflow fetches catalog from OCI and commits `dynamic-plugins.default.yaml` to git repository, operator reads from git
 - **Rejected because**:
   - No way to support multiple catalogs (single synced file in repo)
-  - Git repo becomes source of truth instead of OCI registry (version confusion)
+  - Git repo becomes source of truth instead of OCI registry (possible version confusion)
   - Manual workflow trigger needed for catalog updates
   - Doesn't work for custom/third-party catalogs (require git access/workflow setup)
-  - Air-gap environments can't rely on GitHub workflows
 
-### Alternative 3: Explicit Catalog References in Backstage CR
+### Alternative 2: Explicit Catalog References in Backstage CR
 - **Approach**: Users specify which catalogs to use in `spec.catalogs[]`
 - **Rejected because**:
   - More verbose (every Backstage CR must list catalogs)
@@ -124,15 +115,15 @@ status:
 ### Negative
 
 ❌ **Cluster-scoped permissions**: Creating catalogs requires cluster-admin or cluster-scoped RBAC (not namespace-scoped)
-❌ **ConfigMap proliferation**: 2 ConfigMaps per catalog (mirrored + original)
-❌ **Version coupling**: Catalogs tied to RHDH versions (must upgrade catalogs with operator)
+❌ **ConfigMap proliferation**: 2 ConfigMaps per catalog in Air-gap case(mirrored + original) - can be avoided but having it is more convenient
+❌ **Version coupling**: Catalogs tied to RHDH versions (must upgrade catalogs with operator) - but it is what is used anyway
 ❌ **Additional CRD**: More resources to learn, manage, and troubleshoot
 
 ### Neutral
 
 ⚖️ **Automatic discovery**: All catalogs discovered automatically (no explicit references), trade-off between convenience and explicit control
 ⚖️ **Primary catalog guaranteed**: Operator installation includes primary catalog (reduces setup, but adds mandatory resource)
-⚖️ **Dual ConfigMap pattern**: Separate mirrored/original URLs enable air-gap while preserving source information
+⚖️ **Dual ConfigMap pattern for Air-gap**: Separate mirrored/original URLs enable air-gap while preserving source information
 ⚖️ **Catalog immutability**: Once created, catalog content changes only via re-fetch (predictable but requires explicit refresh)
 
 ## Notes
@@ -142,5 +133,5 @@ status:
 - ADR-004 (Plugin Infrastructure Support) uses catalog ConfigMaps for image discovery
 
 **Open questions for implementation:**
-- Catalog conflict resolution: What if same plugin exists in multiple catalogs? 
+- Catalog conflict resolution: What if same plugin exists in multiple catalogs? Is it allowed at all?
 - Catalog update strategy: How do catalog updates trigger Backstage instance redeployment?
