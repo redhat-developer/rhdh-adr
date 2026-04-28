@@ -20,7 +20,7 @@
 **Constraints:**
 - Must maintain backward compatibility with existing Backstage CRs (including Helm-deployed instances)
 - Must preserve existing config merge semantics (catalogs → flavours → user)
-- Must support short identifier resolution (see architecture doc)
+- Must support short identifier resolution 
 
 ## Decision
 
@@ -36,24 +36,24 @@ Move plugin configuration processing from init container to operator reconciliat
    - Merge in order: catalogs → flavours → user overrides
 
 2. **Short identifier resolution**:
-   - Detect package format: `oci://` → full OCI URL (used as-is)
-   - Otherwise → short identifier (catalog lookup for OCI package URL)
+   - Detect package format: `oci://`, 'npm://', "./" → full URL (used as-is)
+   - "ref://" → short identifier (catalog lookup for OCI package URL)
    - Resolve short identifiers by searching configured catalogs (returns OCI URL from catalog)
    - Strict validation: fail on unknown identifiers (protects against typos)
    - No version overrides with short identifiers (use catalog version exactly)
 
 3. **Dual ConfigMap generation**:
-   - `<name>-dynamic-plugins-generated`: Merged plugin config for init container
-     - Includes resolved full package URLs
+   - `backstage-dynamic-plugins-<CR name>`: Merged plugin config for init container
+     - Includes resolved (see Short identifier resolution) full package URLs
      - Includes `catalogSource` field for traceability
-   - `<name>-app-config-plugins`: Extracted `pluginConfig` for Backstage app-config
+   - `backstage-appconfig-plugins-<CR-name>`: Extracted `pluginConfig` for Backstage app-config
      - Only plugin configuration (no package/installation info)
+     - Both ConfigMaps includes Enabled plugins only
 
 4. **Early validation**:
    - Validate merged config during reconciliation
-   - Report errors in Backstage CR status 
+   - Report errors, warnings in Backstage CR status 
    - Fail reconciliation on validation errors (fail fast)
-   - Update CR status with validation results
 
 5. **Backward compatibility**:
    - Existing init container works without modification
@@ -68,13 +68,13 @@ Operator Reconciliation:
 ├─ 2. Load plugins from <catalog>-catalog ConfigMaps
 ├─ 3. Load flavour configs (if applicable)
 ├─ 4. Load user configs from spec.application.dynamicPluginsConfigMapName
-├─ 5. Resolve short identifiers → full package URLs
-├─ 6. Merge configs (catalogs → flavours → user)
+├─ 5. Merge configs (catalogs → flavours → user)
+├─ 6. Resolve short identifiers → full package URLs
 ├─ 7. Validate merged config
 │    ├─ If invalid: Update CR status, fail reconciliation
 │    └─ If valid: Continue
-├─ 8. Generate <name>-dynamic-plugins-generated ConfigMap
-├─ 9. Generate <name>-app-config-plugins ConfigMap
+├─ 8. Generate backstage-dynamic-plugins-<CR name> ConfigMap
+├─ 9. Generate backstage-appconfig-plugins-<CR-name> ConfigMap
 ├─ 10. Create/Update Deployment with ConfigMaps mounted
 └─ 11. Update CR status with plugin count, catalog sources
 ```
@@ -85,11 +85,11 @@ Operator Reconciliation:
 # User's dynamic-plugins.yaml
 plugins:
   # Short identifier - resolved from catalogs
-  - package: backstage-plugin-techdocs
+  - package: ref://backstage-plugin-techdocs
     disabled: false
 
   # Full URL - used as-is (exact match)
-  - package: oci://internal.registry/custom-plugin:1.0.0!my-plugin
+  - package: oci://internal.registry/custom-plugin:1.0.0!custom-plugin
     disabled: false
 ```
 
@@ -100,26 +100,26 @@ Operator resolves `backstage-plugin-techdocs` to full URL from catalog, validate
 ### Positive
 
 ✅ **Early validation**: Config errors caught during reconciliation (fail fast with clear CR status)
-✅ **Config visibility**: Inspect merged config via `kubectl get cm <name>-dynamic-plugins-generated -o yaml`
+✅ **Config visibility**: Inspect merged config via `kubectl get cm backstage-dynamic-plugins-<CR name> -o yaml`
 ✅ **Better debugging**: Validation errors in CR status, not init container logs
 ✅ **Catalog-based defaults**: Short identifiers enable portable configs (same config works everywhere)
 ✅ **Testable**: Unit test config merging logic without container builds
 ✅ **Operator awareness**: Operator knows about plugins (enables future features like dependency validation)
-✅ **Enables lightweight init container**: Future optimization can replace heavy init container (Node.js/Python) with minimal package downloader for operator deployments
+✅ **Enables lightweight init container**: Future optimization can replace heavy init container (currently containing Node.js/Python) with minimal package downloader for operator deployments
+✅ **Enables significant simplification of package downloading script** Light logic, potentially no Python needed   
 
 ### Negative
 
 ❌ **Operator complexity**: Config merging logic moves from bash scripts to Go controller code
 ❌ **Larger reconciliation loop**: More work during reconciliation (fetch catalogs, merge configs)
 ❌ **Testing burden**: Need comprehensive unit tests for merging logic, edge cases
-❌ **ConfigMap management**: 2 additional ConfigMaps per Backstage instance (plugins + app-config)
+❌ **ConfigMap management**: 1 additional ConfigMaps per Backstage instance (app-config)
 
 ### Neutral
 
-⚖️ **Strict identifier validation**: Typo protection but requires exact catalog plugin names
 ⚖️ **Catalog dependency**: Config processing depends on DevHubPluginCatalog availability (coupled to ADR-002)
 ⚖️ **Plugin name extraction**: Operator must parse package URLs to extract plugin names (format-specific logic)
-⚖️ **Init container still needed**: Operator provides configs but init container still downloads packages (can be optimized later with lightweight replacement)
+⚖️ **Init container still needed**: Operator provides configs but init container still downloads packages (can be optimized later with lightweight replacement). Having this dependency until support more than just "oci://"
 
 ## Notes
 
@@ -134,6 +134,5 @@ Operator resolves `backstage-plugin-techdocs` to full URL from catalog, validate
   - `oci://host/path/plugin-name:tag` → "plugin-name" (last path segment)
 
 **Open questions for implementation:**
-- Catalog search order: How to prioritize when same plugin exists in multiple catalogs?
-- Config refresh: Should operator re-merge on catalog ConfigMap updates?
-- Error handling: Partial validation failures vs all-or-nothing?
+- Catalog search order: How to prioritize when same plugin exists in multiple catalogs? Do we allow it at all?
+- Config refresh: Should operator re-merge on catalog ConfigMap updates? (Slightly important only for development)
