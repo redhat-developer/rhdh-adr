@@ -12,7 +12,7 @@ The RHDH plugin installation system relies on two runtime network calls:
 
 Both of these calls fail in a disconnected environment. The existing `mirror-plugins.sh` script solves this for Helm chart and Operator deployments by mirroring plugins to a mirror registry (`--to-registry`) or exporting to a directory for later import (`--to-dir` + `--from-dir`). However, both modes assume a registry exists on the destination network. A bootc appliance has no registry — everything must be consumed directly from the local filesystem.
 
-The RHDH bootc base image is intentionally minimal: it ships with `plugins: []`, no `dynamic-plugins.default.yaml`, no default auth providers, and no default catalog rules. Consumers layer their plugins on top. This design is correct, but consumers who want the default plugin set (the ~34 community plugins bundled in the catalog index) have no automated path to get them onto disk for a disconnected deployment.
+The RHDH bootc base image ships with a default `CATALOG_INDEX_IMAGE` reference (e.g., `quay.io/rhdh/plugin-catalog-index:1.9`) in `rhdh.env`, but no plugins baked onto disk — the actual `dynamic-plugins.default.yaml` and plugin artifacts are pulled at runtime from this OCI reference. In connected environments, this works: the catalog index is pulled, the default plugins are resolved and installed at startup. In a disconnected environment, the pull fails and the default plugins are unavailable. Consumers can still add plugins via `dynamic-plugins.override.yaml`, but there is no automated path to get the default plugin set onto disk for a disconnected deployment.
 
 **Who is impacted**:
 - Teams building air-gapped bootc appliances that consume the RHDH bootc base image (e.g., the Ansible Automation Platform team)
@@ -36,7 +36,7 @@ Enable air-gapped dynamic plugin support for bootc deployments by extending the 
 - **Extend `install-dynamic-plugins.py`** (rhdh repo) to support `file://` protocol for both the `CATALOG_INDEX_IMAGE` environment variable and individual plugin package references, enabling the script to read the catalog index and plugin artifacts directly from the local filesystem instead of pulling them via `skopeo`
 - **Extend `mirror-plugins.sh`** (rhdh-operator repo) with a new `--to-local-plugins` output mode that extracts plugin tarballs to a ready-to-use directory layout and rewrites all `oci://` references to `file://` local paths, rather than mirroring to a registry or keeping plugins in OCI image format
 - **Consolidate output to a single directory** (e.g., `/etc/rhdh/extensions/`) containing the rewritten `dynamic-plugins.default.yaml`, `catalog-entities/`, and extracted `plugins/` subdirectories, so consumers only need one `COPY` and one Quadlet volume mount
-- **Maintain the minimal bootc base image** — the base ships no default plugins, no catalog index, and no changes are needed to any bootc scripts; consumers layer plugins at their image build time using the extended tooling
+- **Maintain the minimal bootc base image** — the base ships with a default `CATALOG_INDEX_IMAGE` reference but no plugins baked onto disk; no changes are needed to any bootc scripts; for air-gapped deployments, consumers override the catalog index reference to a `file://` path and layer the pre-extracted plugins at their image build time using the extended tooling
 
 **Consumer workflow**:
 ```bash
@@ -78,7 +78,7 @@ COPY output/rhdh-extensions/ /etc/rhdh/extensions/
 **Chosen:** The bootc base image requires no changes. Plugin preparation is entirely a consumer-side concern.
 
 **Rationale:**
-- The base image's `plugins: []` design is correct — it makes no assumptions about what plugins a consumer needs
+- The base image ships with a `CATALOG_INDEX_IMAGE` reference for connected environments, but no plugin artifacts on disk — this is the correct separation between "what plugins are available" (the catalog index reference) and "what plugins are on disk" (nothing, until runtime or consumer layering)
 - Baking ~34 default plugins into the base image would add significant size and couple the base to a specific plugin set that changes each release
 - The bootc scripts (`wait-for-plugins-and-start.sh`, `prepare-and-install-dynamic-plugins.sh`) are pass-through orchestrators — they call `install-dynamic-plugins.py` inside the RHDH container and don't parse or care about `CATALOG_INDEX_IMAGE` or plugin references
 - The `install-dynamic-plugins.py` change comes via the RHDH container image version bump (e.g., `rhdh-hub-rhel9:2.1`), which is a routine Quadlet image tag update, not a feature change in the bootc layer
@@ -260,7 +260,9 @@ FROM registry.redhat.io/rhdh/rhdh-rhel9-bootc:2.1
 COPY output/rhdh-extensions/ /etc/rhdh/extensions/
 
 # Point install-dynamic-plugins.py to local catalog index
-RUN echo 'CATALOG_INDEX_IMAGE=file:///opt/app-root/src/extensions/' >> /etc/rhdh/rhdh.env
+# Override the default CATALOG_INDEX_IMAGE (which points to the OCI registry)
+# to use the local filesystem instead
+RUN sed -i 's|^CATALOG_INDEX_IMAGE=.*|CATALOG_INDEX_IMAGE=file:///opt/app-root/src/extensions/|' /etc/rhdh/rhdh.env
 RUN echo 'CATALOG_ENTITIES_EXTRACT_DIR=/opt/app-root/src/extensions/catalog-entities/' >> /etc/rhdh/rhdh.env
 ```
 
@@ -306,7 +308,9 @@ FROM registry.redhat.io/rhdh/rhdh-rhel9-bootc:2.1
 COPY output/rhdh-extensions/ /etc/rhdh/extensions/
 COPY my-dynamic-plugins.override.yaml /etc/rhdh/configs/dynamic-plugins/dynamic-plugins.override.yaml
 
-RUN echo 'CATALOG_INDEX_IMAGE=file:///opt/app-root/src/extensions/' >> /etc/rhdh/rhdh.env
+# Override the default CATALOG_INDEX_IMAGE (which points to the OCI registry)
+# to use the local filesystem instead
+RUN sed -i 's|^CATALOG_INDEX_IMAGE=.*|CATALOG_INDEX_IMAGE=file:///opt/app-root/src/extensions/|' /etc/rhdh/rhdh.env
 ```
 
 ### Example 3: AAP Team Layering Additional Plugins
@@ -323,7 +327,9 @@ COPY aap-plugins/ /etc/rhdh/extensions/plugins/
 # AAP plugin configuration
 COPY dynamic-plugins.override.yaml /etc/rhdh/configs/dynamic-plugins/
 
-RUN echo 'CATALOG_INDEX_IMAGE=file:///opt/app-root/src/extensions/' >> /etc/rhdh/rhdh.env
+# Override the default CATALOG_INDEX_IMAGE (which points to the OCI registry)
+# to use the local filesystem instead
+RUN sed -i 's|^CATALOG_INDEX_IMAGE=.*|CATALOG_INDEX_IMAGE=file:///opt/app-root/src/extensions/|' /etc/rhdh/rhdh.env
 ```
 
 ### Example 4: Connected Bootc (No Change Needed)
