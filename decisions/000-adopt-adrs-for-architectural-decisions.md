@@ -72,9 +72,8 @@ For detailed writing guidelines, see [ADR-GUIDE.md](../ADR-GUIDE.md). To create 
 ✅ A centralized ADR repository can be surfaced in our internal dogfooding RHDH instances using the [Backstage ADR plugin](https://github.com/backstage/community-plugins/tree/main/workspaces/adr/plugins/adr)
 
 ### Negative
-❌ Adds a process step before implementation of significant architectural changes
 ❌ Requires discipline to write ADRs consistently; the practice only works if the team commits to it
-❌ Central repository means ADRs are not co-located with the code they describe
+❌ Without strict criteria for when an ADR is needed, the team may produce too many ADRs — though this is a better problem to have than too few
 
 ### Neutral
 ⚖️ Does not replace JIRA, Slack, or meetings; complements them by capturing the outcome
