@@ -42,7 +42,7 @@ Key constraints:
 
 Add tailored NetworkPolicies to all RHDH install methods (both the operands managed by the RHDH Operator and the resources deployed by the Helm chart) to enforce least-privilege pod communication by default.
 
-**Implementation approach**:
+**Key design principles**:
 
 - **Default deny with selective allow**: Apply a default-deny policy scoped to RHDH-labeled pods (not namespace-wide, since RHDH is a layered product that may share namespaces), then add specific allow rules for known traffic flows
 - **Ingress policies**: Allow inbound traffic only from expected sources:
