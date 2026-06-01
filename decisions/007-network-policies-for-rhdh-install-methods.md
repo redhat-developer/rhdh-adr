@@ -30,7 +30,7 @@ Since the specific internal endpoints vary per deployment, default egress polici
 
 These introduce additional traffic flows that policies must account for:
 
-- **Lightspeed (enabled by default since RHDH 1.10)**: Lightspeed adds a sidecar container to the RHDH pod that needs egress to LLM inference endpoints. Since it is enabled by default, the base egress policies must accommodate this traffic.
+- **Lightspeed (enabled by default since RHDH 1.10)**: Lightspeed adds a sidecar container to the RHDH pod that might need egress to LLM inference endpoints. Since NetworkPolicies apply at the pod level (not per container), the base egress policies on the RHDH pod govern the sidecar's traffic as well. Since Lightspeed is enabled by default, the base egress policies must accommodate this traffic.
 - **Orchestrator (opt-in)**: The Orchestrator flavor introduces cross-namespace traffic flows with OpenShift Serverless and Serverless Logic operators, and its SonataFlow components (Data Index, Job Service) connect back to RHDH's PostgreSQL. Users may also bring their own external SonataFlowPlatform, requiring egress to endpoints in a different namespace or outside the cluster.
 - **External database**: RHDH supports connecting to an external PostgreSQL instance that may live outside of the cluster. Egress policies scoped to in-namespace pods would block this connection.
 
