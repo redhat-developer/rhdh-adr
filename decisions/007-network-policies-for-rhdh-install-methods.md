@@ -62,7 +62,7 @@ Add tailored NetworkPolicies to all RHDH install methods (both the operands mana
 - **Label-scoped policies**: Since RHDH is a layered product deployed into potentially shared namespaces, policies use `podSelector` with RHDH-specific labels rather than namespace-wide selectors, following the OCP best practice for layered products
 - **Operator vs. OLM boundary**: The RHDH Operator manages NetworkPolicies for its operands (RHDH pods, PostgreSQL, etc.) directly. NetworkPolicies for the operator pod itself are out of scope here and will be handled via OLM once support is fully backported ([RHDHPLAN-351](https://redhat.atlassian.net/browse/RHDHPLAN-351))
 
-## Alternatives Considered
+## Alternatives considered
 
 ### Alternative 1: Namespace-wide default deny
 - **Approach**: Apply a blanket default-deny policy with `podSelector: {}` covering all pods in the namespace
