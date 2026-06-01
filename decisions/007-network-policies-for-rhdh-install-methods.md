@@ -40,7 +40,7 @@ Key constraints:
 
 ## Decision
 
-Add tailored NetworkPolicies to all RHDH install methods — both the operands managed by the RHDH Operator and the resources deployed by the Helm chart — to enforce least-privilege pod communication by default.
+Add tailored NetworkPolicies to all RHDH install methods (both the operands managed by the RHDH Operator and the resources deployed by the Helm chart) to enforce least-privilege pod communication by default.
 
 **Implementation approach**:
 
@@ -56,7 +56,7 @@ Add tailored NetworkPolicies to all RHDH install methods — both the operands m
   - AI model endpoints for Lightspeed, either cluster-internal model servers or external LLM APIs
   - Cross-namespace traffic to OpenShift Serverless and Serverless Logic namespaces when the Orchestrator flavor is enabled
   - Any additional egress (SCM providers, CI/CD systems, container registries, etc.) is left to the user to allow via their own additive NetworkPolicy resources, since these destinations are deployment-specific
-- **Clear boundary between base and user-managed policies**: The base policies shipped by the Operator and Helm chart cover only the core traffic flows that are common to all RHDH deployments (DNS, API server, PostgreSQL, Lightspeed model endpoints, Orchestrator cross-namespace traffic). All deployment-specific egress — SCM providers, CI/CD systems, container registries, auth providers, internal mirrors, external SonataFlowPlatform endpoints, etc. — is the user's responsibility to allow.
+- **Clear boundary between base and user-managed policies**: The base policies shipped by the Operator and Helm chart cover only the core traffic flows that are common to all RHDH deployments (DNS, API server, PostgreSQL, Lightspeed model endpoints, Orchestrator cross-namespace traffic). All deployment-specific egress (SCM providers, CI/CD systems, container registries, auth providers, internal mirrors, external SonataFlowPlatform endpoints, etc.) is the user's responsibility to allow.
 - **User-extensible via additive policies**: This split is possible because Kubernetes NetworkPolicies are **additive**: once a default-deny policy selects a pod, any additional NetworkPolicy matching that pod can only add more allow rules, never remove existing ones. Users who need to allow additional site-specific traffic simply create their own NetworkPolicy resources in the same namespace. These compose naturally with the base policies without any CRD or Helm values change. The only configuration surface needed in the Operator CR and Helm values is a boolean to disable the base NetworkPolicies entirely (for clusters without enforcement or for debugging)
 - **Documentation**: Clear documentation is essential to make this approach work in practice. Users need to understand which base policies are shipped, what traffic they allow and deny, how to create additional NetworkPolicies for their site-specific needs, and how to troubleshoot connectivity issues caused by policies. Documentation should also clarify the requirement for a NetworkPolicy-capable CNI plugin on non-OCP platforms and provide guidance for common scenarios (disconnected environments, external databases, custom plugins reaching additional endpoints)
 - **Label-scoped policies**: Since RHDH is a layered product deployed into potentially shared namespaces, policies use `podSelector` with RHDH-specific labels rather than namespace-wide selectors, following the OCP best practice for layered products
@@ -74,7 +74,7 @@ Add tailored NetworkPolicies to all RHDH install methods — both the operands m
 
 ### Alternative 3: Expose custom NetworkPolicy rules in the Operator CR
 - **Approach**: Add fields like `spec.networkPolicies.additionalEgressRules[]` and `spec.networkPolicies.additionalIngressRules[]` to the Backstage CR schema, allowing users to declare custom allow rules through the Operator's configuration surface
-- **Rejected because**: The Backstage CR currently has no such fields, and since NetworkPolicies are additive, users can achieve the same result by creating their own NetworkPolicy resources directly in the namespace — no CRD schema change is needed. Adding these fields would increase the API surface and maintenance burden of the Operator for no functional benefit over user-managed policies. Note: the upstream Backstage Helm chart already provides a [`networkPolicy`](https://github.com/redhat-developer/rhdh-chart/blob/release-1.10/charts/backstage/vendor/backstage/charts/backstage/values.yaml#L392-L428) section in `values.yaml` with `ingressRules.customRules[]`, `egressRules.customRules[]`, and a `denyConnectionsToExternal` toggle — this existing Helm mechanism is sufficient for Helm-based deployments and does not need to be replicated in the Operator CR.
+- **Rejected because**: The Backstage CR currently has no such fields, and since NetworkPolicies are additive, users can achieve the same result by creating their own NetworkPolicy resources directly in the namespace. No CRD schema change is needed. Adding these fields would increase the API surface and maintenance burden of the Operator for no functional benefit over user-managed policies. Note: the upstream Backstage Helm chart already provides a [`networkPolicy`](https://github.com/redhat-developer/rhdh-chart/blob/release-1.10/charts/backstage/vendor/backstage/charts/backstage/values.yaml#L392-L428) section in `values.yaml` with `ingressRules.customRules[]`, `egressRules.customRules[]`, and a `denyConnectionsToExternal` toggle. This existing Helm mechanism is sufficient for Helm-based deployments and does not need to be replicated in the Operator CR.
 
 ### Alternative 4: Rely solely on documentation and leave NetworkPolicies to the user
 - **Approach**: Document recommended NetworkPolicies without shipping them
@@ -85,18 +85,18 @@ Add tailored NetworkPolicies to all RHDH install methods — both the operands m
 ### Positive
 - ✅ Enforces least-privilege network access by default, reducing the attack surface for RHDH deployments
 - ✅ Addresses the risk identified in the OCP Threat Model ([OCPSTRAT-819](https://redhat.atlassian.net/browse/OCPSTRAT-819))
-- ✅ Works transparently on OCP (which enforces NetworkPolicies out of the box) — no user action required
+- ✅ Works transparently on OCP, which enforces NetworkPolicies out of the box. No user action required
 - ✅ Does not break deployments on clusters without NetworkPolicy enforcement (policies are created but simply not enforced by Kubernetes)
-- ✅ Configurable — users can extend, customize, or disable policies to fit their environment (airgapped, proxied, etc.)
+- ✅ Configurable. Users can extend, customize, or disable policies to fit their environment (airgapped, proxied, etc.)
 
 ### Negative
-- ❌ Users must create their own additional NetworkPolicies for site-specific egress (SCMs, CI/CD, registries, auth providers, etc.) — the base policies do not cover these, which requires awareness and documentation
-- ❌ Users on non-OCP platforms must ensure their CNI plugin supports NetworkPolicy enforcement, otherwise policies exist but provide no actual protection — this requires clear documentation to avoid a false sense of security
-- ❌ Adds complexity to the Operator and Helm chart codebases — policies must be kept in sync with any changes to RHDH pod labels, ports, or component architecture, and must account for optional features (Lightspeed sidecars, Orchestrator cross-namespace flows, external databases)
+- ❌ Users must create their own additional NetworkPolicies for site-specific egress (SCMs, CI/CD, registries, auth providers, etc.). The base policies do not cover these, which requires awareness and documentation
+- ❌ Users on non-OCP platforms must ensure their CNI plugin supports NetworkPolicy enforcement. Otherwise, policies exist but provide no actual protection, which requires clear documentation to avoid a false sense of security
+- ❌ Adds complexity to the Operator and Helm chart codebases. Policies must be kept in sync with any changes to RHDH pod labels, ports, or component architecture, and must account for optional features (Lightspeed sidecars, Orchestrator cross-namespace flows, external databases)
 - ❌ Requires testing across all supported platforms (OCP, EKS, AKS, GKE) and across deployment variants (with/without Lightspeed, Orchestrator, external database) to validate that policies do not inadvertently block legitimate traffic
 
 ### Neutral
-- ⚖️ Existing deployments without NetworkPolicies continue to work — adding policies is additive and does not change behavior on clusters without enforcement
+- ⚖️ Existing deployments without NetworkPolicies continue to work. Adding policies is additive and does not change behavior on clusters without enforcement
 - ⚖️ The Orchestrator-specific NetworkPolicies already in place will need to be reconciled with the new base policies to avoid duplication or conflicts
 - ⚖️ OLM-managed NetworkPolicies for the operator pod itself remain out of scope until OLM support is backported ([RHDHPLAN-351](https://redhat.atlassian.net/browse/RHDHPLAN-351))
 - ⚖️ The RHDH must-gather should be updated to collect NetworkPolicies in place, so as to help troubleshoot potential connectivity failures caused by overly restrictive or misconfigured policies
@@ -106,5 +106,6 @@ Add tailored NetworkPolicies to all RHDH install methods — both the operands m
 - [Kubernetes NetworkPolicy documentation](https://kubernetes.io/docs/concepts/services-networking/network-policies/)
 - [OpenShift NetworkPolicy documentation](https://docs.openshift.com/container-platform/4.18/networking/network_security/network_policy/about-network-policy.html)
 - [Best Practices for developing Network Policies](https://docs.google.com/document/d/1CDoGSRd-h8VT4PMrK_83Ro0YzYPjORbkxtfTJU1sN6Q/edit?tab=t.0)
+- [OCPSTRAT-819: Protect from unintended data leaks / attacks via tailored Network Policies](https://redhat.atlassian.net/browse/OCPSTRAT-819)
 - [RHDHPLAN-1032: Add tailored NetworkPolicies to the Install Methods](https://redhat.atlassian.net/browse/RHDHPLAN-1032)
-- [RHDHPLAN-351: NetworkPolicies for the RHDH Operator itself (OLM-managed)](https://redhat.atlassian.net/browse/[RHDHPLAN-351](https://redhat.atlassian.net/browse/RHDHPLAN-351))
+- [RHDHPLAN-351: NetworkPolicies for the RHDH Operator itself (OLM-managed)](https://redhat.atlassian.net/browse/RHDHPLAN-351)
