@@ -12,7 +12,7 @@ The absence of NetworkPolicies in RHDH was identified as a risk in the OCP Threa
 
 Additionally, RHDH is supported across multiple Kubernetes platforms (OCP, EKS, AKS, GKE), each with different levels of default NetworkPolicy enforcement. OCP enforces NetworkPolicies out of the box, but other platforms may require users to configure a compatible CNI plugin.
 
-**Disconnected/airgapped environments** considerations:
+### Disconnected/airgapped environments
 
 In these environments, RHDH cannot reach public endpoints and instead relies on internal infrastructure. The egress traffic flows affected include:
 
@@ -26,13 +26,15 @@ Note that container image pulls (for the RHDH pod images themselves) happen at t
 
 Since the specific internal endpoints vary per deployment, default egress policies cannot enumerate them. The policies must therefore either be broadly permissive on common ports (443, 8443, etc.) or provide a clear configuration surface for users to add their site-specific endpoints.
 
-**Advanced deployment scenarios** introduce additional traffic flows that policies must account for:
+### Advanced deployment scenarios
+
+These introduce additional traffic flows that policies must account for:
 
 - **Lightspeed (enabled by default since RHDH 1.10)**: Lightspeed adds a sidecar container to the RHDH pod that needs egress to LLM inference endpoints. Since it is enabled by default, the base egress policies must accommodate this traffic.
 - **Orchestrator (opt-in)**: The Orchestrator flavor introduces cross-namespace traffic flows with OpenShift Serverless and Serverless Logic operators, and its SonataFlow components (Data Index, Job Service) connect back to RHDH's PostgreSQL. Users may also bring their own external SonataFlowPlatform, requiring egress to endpoints in a different namespace or outside the cluster.
 - **External database**: RHDH supports connecting to an external PostgreSQL instance that may live outside of the cluster. Egress policies scoped to in-namespace pods would block this connection.
 
-Key constraints:
+### Key constraints
 - NetworkPolicies must not break existing RHDH functionality on any supported platform
 - Deployment must not fail on clusters without NetworkPolicy-capable CNI plugins. But Kubernetes already handles this gracefully as policies will be created but not enforced
 - The RHDH Operator itself is installed via OLM, and OLM NetworkPolicy support is still being backported (tracked separately in [RHDHPLAN-351](https://redhat.atlassian.net/browse/RHDHPLAN-351)). This ADR covers only the operands managed by the operator and the Helm chart resources
