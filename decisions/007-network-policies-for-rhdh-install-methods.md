@@ -4,7 +4,7 @@
 
 **Problem**: RHDH deployments currently lack NetworkPolicies, leaving both inbound and outbound traffic unrestricted. This exposes deployments to two categories of risk: unauthorized access to RHDH pods from other workloads (lateral movement), and unrestricted outbound traffic from RHDH pods to external or internal destinations (data exfiltration, communication with unauthorized endpoints).
 
-The absence of NetworkPolicies was identified as a risk in the OCP Threat Model ([OCPSTRAT-819](https://redhat.atlassian.net/browse/OCPSTRAT-819)). Today, the only NetworkPolicies shipped by RHDH are specific to the Orchestrator flavor; the base RHDH deployment (both Operator-managed operands and Helm chart) has no network traffic restrictions at all. This means:
+The absence of NetworkPolicies was identified as a risk in the OCP Threat Model ([OCPSTRAT-819](https://redhat.atlassian.net/browse/OCPSTRAT-819)). Additionally, shipping NetworkPolicies for operator-managed workloads is now a requirement for all Red Hat Operators targeting OCP 5+. Today, the only NetworkPolicies shipped by RHDH are specific to the Orchestrator flavor; the base RHDH deployment (both Operator-managed operands and Helm chart) has no network traffic restrictions at all. This means:
 
 - **Ingress**: Any pod in the namespace (or cluster, depending on the network plugin) can reach RHDH pods and its dependencies (PostgreSQL, etc.) without restriction
 - **Egress**: RHDH pods can make unrestricted outbound connections to any destination, increasing the blast radius if a pod is compromised
