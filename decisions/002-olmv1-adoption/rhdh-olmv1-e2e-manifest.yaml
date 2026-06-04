@@ -1,0 +1,50 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rhdh-operator
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rhdh-installer
+  namespace: rhdh-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: rhdh-e2e-installer-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: rhdh-installer
+  namespace: rhdh-operator
+---
+apiVersion: olm.operatorframework.io/v1
+kind: ClusterCatalog
+metadata:
+  name: rhdh-custom-catalog
+spec:
+  source:
+    type: Image
+    image:
+      ref: quay.io/fndlovu/rhdh-operator-catalog:1.9.0-olmv1-verify-a1b48bd
+      pollInterval: 10m
+  priority: 200
+---
+apiVersion: olm.operatorframework.io/v1
+kind: ClusterExtension
+metadata:
+  name: rhdh
+spec:
+  namespace: rhdh-operator
+  serviceAccount:
+    name: rhdh-installer
+  source:
+    sourceType: Catalog
+    catalog:
+      packageName: rhdh
+      catalogFilter: rhdh-custom-catalog
