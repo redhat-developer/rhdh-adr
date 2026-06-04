@@ -26,6 +26,7 @@ We verified the RHDH operator (v1.9.0 from main, commit a1b48bd) against OLM v1 
 | Integration tests | **25/26 passed** | [test-suite-findings-olmv1.md](test-suite-findings-olmv1.md) |
 | E2E tests | **1/7 passed** (route-delete timeouts) | [test-suite-findings-olmv1.md](test-suite-findings-olmv1.md) |
 | In-place upgrade v1.7.0 to v1.9.4 | **BLOCKED** without preflight override | [upgrade-path-findings-olmv1.md](upgrade-path-findings-olmv1.md) |
+| `install-rhdh-catalog-source.sh` | **No OLM v1 awareness** — uses v0 path exclusively | [findings-install-rhdh-catalog-source-sh.md](findings-install-rhdh-catalog-source-sh.md) |
 
 ### Manifests used
 
@@ -97,6 +98,52 @@ See [test-suite-findings-olmv1.md](test-suite-findings-olmv1.md) Finding 3.
 
 Run the same E2E tests against an OLM v0 deployment on the same cluster to compare.
 
+### 6. Update `install-rhdh-catalog-source.sh` for OLM v1 (High Priority)
+
+The script (`.rhdh/scripts/install-rhdh-catalog-source.sh`) is used by CI and for manual testing. It creates OLM v0 resources exclusively (CatalogSource, Subscription, OperatorGroup) and has no OLM v1 awareness. On OCP 4.21 where both OLM v0 and v1 are present, it succeeds via the v0 path and never touches OLM v1. On a future OLM v1-only cluster, it would fail.
+
+The script needs an OLM v1 code path that:
+- Detects OLM v1 by checking for the `clusterextensions.olm.operatorframework.io` CRD
+- Creates ClusterCatalog instead of CatalogSource
+- Creates ClusterExtension instead of Subscription + OperatorGroup
+- Creates a ServiceAccount + ClusterRoleBinding for the ClusterExtension
+- Uses `catalogFilter` when custom catalogs coexist with default Red Hat catalogs
+
+The IIB rendering and image rebuild phase (`ocp_install` function) is OLM-version-agnostic and can be reused — only the resource creation at the end needs to change.
+
+**Backward compatibility**: The OLM v0 path must be preserved. CI runs against multiple OCP versions (4.x through 4.21+), and older clusters only have OLM v0. The script should detect which OLM is available and choose the appropriate path, falling back to v0 when v1 is not present.
+
+See [findings-install-rhdh-catalog-source-sh.md](findings-install-rhdh-catalog-source-sh.md) for the full run output, observations, and proposed OLM v1 manifest equivalents.
+
+### 7. Update `prepare-restricted-environment.sh` for OLM v1 (Medium Priority — TODO: needs live airgap testing)
+
+The airgap script (`.rhdh/scripts/prepare-restricted-environment.sh`) has the same OLM v1 gap as `install-rhdh-catalog-source.sh`. It creates OLM v0 resources exclusively:
+
+- Generates `catalogSource.yaml` — OLM v0 CatalogSource (lines 1109-1125)
+- Generates `operatorGroup.yaml` — OLM v0 OperatorGroup (lines 1227-1233)
+- Generates `subscription.yaml` — OLM v0 Subscription (lines 1235-1247)
+- oc-mirror path processes CatalogSource manifests from oc-mirror output (lines 1031-1042)
+- K8s path checks for `catalogsources.operators.coreos.com` CRD, exits if missing (line 1092)
+
+The image mirroring infrastructure (skopeo copies, oc-mirror, IDMS/ITMS generation, bundle processing) is OLM-version-agnostic. Only the final resource creation needs OLM v1 equivalents:
+
+| Current (OLM v0) | Needed (OLM v1) |
+|---|---|
+| `catalogSource.yaml` (CatalogSource) | ClusterCatalog with `spec.source.image.ref` pointing at mirrored catalog |
+| `operatorGroup.yaml` (OperatorGroup) | Not needed |
+| `subscription.yaml` (Subscription) | ClusterExtension + ServiceAccount + ClusterRoleBinding |
+| oc-mirror `cs-*.yaml` processing | oc-mirror may not generate OLM v1 resources yet — needs investigation |
+
+Additional considerations for the airgap OLM v1 path:
+- ClusterCatalog `pullSecret` must reference the mirror registry auth secret
+- `catalogFilter` is needed to scope resolution to the mirrored catalog
+- The `OperatorHub` patch that disables default sources (line 1216) may behave differently with OLM v1 ClusterCatalogs
+- oc-mirror v2 currently generates CatalogSource manifests — unclear if it will add ClusterCatalog support
+
+**Backward compatibility**: Same as item 6. The OLM v0 path must remain functional for clusters without OLM v1. Airgap environments are particularly sensitive to regressions since testing them is harder.
+
+**TODO**: This script has not been run against an OLM v1 cluster yet. A live airgap test is needed to validate the expected behavior and uncover any issues specific to disconnected OLM v1 installs.
+
 ## Alternatives Considered
 
 ### Alternative 1: Wait for OLM v1 to become mandatory
@@ -128,10 +175,10 @@ Run the same E2E tests against an OLM v0 deployment on the same cluster to compa
 
 The following areas were not covered in this spike and should be addressed in follow-up work:
 
-- **Airgap/disconnected flow** — mirror registry setup and image mirroring for OLM v1
+- **Airgap/disconnected flow** — mirror registry setup and image mirroring for OLM v1. The `prepare-restricted-environment.sh` script has been reviewed for OLM v1 gaps (see item 7) but not yet run against a live airgap cluster
 - **Plugin infrastructure dependencies** — ArgoCD, Serverless, Pipelines operators installed via OLM v1 alongside RHDH
 - **Namespace install modes** — OwnNamespace and SingleNamespace modes (GA in OCP 4.21)
-- **Automated CI test mode** — running OLM v1 verification as part of the CI pipeline
+- **Automated CI test mode** — running OLM v1 verification as part of the CI pipeline (the `install-rhdh-catalog-source.sh` script used by CI has been evaluated — see item 6 — but the CI pipeline itself has not been updated)
 - **OperatorConditions absence** — OLM v1 does not create OperatorConditions objects; verify the operator handles this gracefully
 
 ## References
