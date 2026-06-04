@@ -144,6 +144,35 @@ Additional considerations for the airgap OLM v1 path:
 
 **TODO**: This script has not been run against an OLM v1 cluster yet. A live airgap test is needed to validate the expected behavior and uncover any issues specific to disconnected OLM v1 installs.
 
+### 8. Update orchestrator Helm templates in rhdh-chart (Medium Priority)
+
+The [rhdh-chart](https://github.com/redhat-developer/rhdh-chart) repository contains Helm templates that install orchestrator infrastructure operators via OLM v0 resources. These templates will need OLM v1 equivalents:
+
+**Subscriptions** (5 files):
+- [`charts/orchestrator-infra/templates/serverless/subscription.yaml`](https://github.com/redhat-developer/rhdh-chart/blob/main/charts/orchestrator-infra/templates/serverless/subscription.yaml)
+- [`charts/orchestrator-infra/templates/serverless-logic/subscription.yaml`](https://github.com/redhat-developer/rhdh-chart/blob/main/charts/orchestrator-infra/templates/serverless-logic/subscription.yaml)
+- [`charts/orchestrator-software-templates-infra/templates/openshift-gitops/subscription.yaml`](https://github.com/redhat-developer/rhdh-chart/blob/main/charts/orchestrator-software-templates-infra/templates/openshift-gitops/subscription.yaml)
+- [`charts/orchestrator-software-templates-infra/templates/openshift-pipelines/subscription.yaml`](https://github.com/redhat-developer/rhdh-chart/blob/main/charts/orchestrator-software-templates-infra/templates/openshift-pipelines/subscription.yaml)
+
+**OperatorGroups** (2 files):
+- [`charts/orchestrator-infra/templates/serverless/operator-group.yaml`](https://github.com/redhat-developer/rhdh-chart/blob/main/charts/orchestrator-infra/templates/serverless/operator-group.yaml)
+- [`charts/orchestrator-infra/templates/serverless-logic/operator-group.yaml`](https://github.com/redhat-developer/rhdh-chart/blob/main/charts/orchestrator-infra/templates/serverless-logic/operator-group.yaml)
+
+**CatalogSource** (1 file):
+- [`charts/orchestrator-software-templates-infra/templates/catalogsource.yaml`](https://github.com/redhat-developer/rhdh-chart/blob/main/charts/orchestrator-software-templates-infra/templates/catalogsource.yaml)
+
+Each Subscription would need a ClusterExtension equivalent, each OperatorGroup can be dropped, and the CatalogSource needs a ClusterCatalog equivalent. The Helm chart values would need a way to toggle between OLM v0 and v1 resource generation for backward compatibility with older clusters.
+
+### 9. Update CI pipeline operator installation in rhdh (Low Priority)
+
+The [rhdh](https://github.com/redhat-developer/rhdh) repository's CI pipeline library installs the OpenShift Pipelines operator via an OLM v0 Subscription:
+
+- [``.ci/pipelines/lib/operators.sh``](https://github.com/redhat-developer/rhdh/blob/main/.ci/pipelines/lib/operators.sh) — the `operator::install_pipelines()` function creates a Subscription for `openshift-pipelines-operator-rh` from `redhat-operators` in `openshift-operators` namespace
+
+This is called by `cluster_setup_ocp_helm()` and `cluster_setup_ocp_operator()` in [`.ci/pipelines/utils.sh`](https://github.com/redhat-developer/rhdh/blob/main/.ci/pipelines/utils.sh).
+
+**Backward compatibility**: The OLM v0 path must be preserved since CI runs against OCP versions that only have OLM v0. The function should detect which OLM is available and use ClusterExtension when on v1, falling back to Subscription on v0.
+
 ## Alternatives Considered
 
 ### Alternative 1: Wait for OLM v1 to become mandatory
@@ -176,7 +205,7 @@ Additional considerations for the airgap OLM v1 path:
 The following areas were not covered in this spike and should be addressed in follow-up work:
 
 - **Airgap/disconnected flow** — mirror registry setup and image mirroring for OLM v1. The `prepare-restricted-environment.sh` script has been reviewed for OLM v1 gaps (see item 7) but not yet run against a live airgap cluster
-- **Plugin infrastructure dependencies** — ArgoCD, Serverless, Pipelines operators installed via OLM v1 alongside RHDH
+- **Plugin infrastructure dependencies** — ArgoCD, Serverless, Pipelines operators installed via OLM v1 alongside RHDH. The Helm templates and CI scripts that install these have been identified (see items 8 and 9) but not yet tested with OLM v1
 - **Namespace install modes** — OwnNamespace and SingleNamespace modes (GA in OCP 4.21)
 - **Automated CI test mode** — running OLM v1 verification as part of the CI pipeline (the `install-rhdh-catalog-source.sh` script used by CI has been evaluated — see item 6 — but the CI pipeline itself has not been updated)
 - **OperatorConditions absence** — OLM v1 does not create OperatorConditions objects; verify the operator handles this gracefully
@@ -189,4 +218,3 @@ The following areas were not covered in this spike and should be addressed in fo
 - [OLM v1 intent-to-release](https://access.redhat.com/articles/7134648)
 - [RHDH feature: RHDHPLAN-660](https://redhat.atlassian.net/browse/RHDHPLAN-660)
 - [RHDH spike: RHIDP-8656](https://redhat.atlassian.net/browse/RHIDP-8656)
-- Key contacts: Eugenia Gibson (PgM), Marina Kalinin (PM), Gavin Bell (EM), Joe Lanford (Staff Eng)
