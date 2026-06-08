@@ -46,7 +46,7 @@ Add tailored NetworkPolicies to all RHDH install methods (both the operands mana
 
 **Key design principles**:
 
-- **Default deny with selective allow**: Apply a default-deny policy scoped to RHDH-labeled pods (not namespace-wide, since RHDH is a layered product that may share namespaces), then add specific allow rules for known traffic flows
+- **Default deny with selective allow**: Apply a default-deny policy scoped to RHDH-labeled pods (not namespace-wide, since RHDH is a layered product that may share namespaces), then add specific allow rules for known traffic flows. This applies to all RHDH-managed pods, not just the RHDH backend. Each component (e.g., RHDH backend, PostgreSQL) gets its own policies appropriate to its role, ensuring defense-in-depth across all components
 - **Ingress policies**: Allow inbound traffic only from expected sources:
   - OpenShift Router / Ingress controller to the RHDH backend (for user access via Routes/Ingresses)
   - Monitoring/metrics scrapers to the metrics endpoints
