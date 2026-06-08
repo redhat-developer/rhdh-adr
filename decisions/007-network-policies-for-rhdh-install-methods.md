@@ -98,6 +98,9 @@ Add tailored NetworkPolicies to all RHDH install methods (both the operands mana
 - ✅ Works transparently on OCP, which enforces NetworkPolicies out of the box. No user action required
 - ✅ Does not break deployments on clusters without NetworkPolicy enforcement (policies are created but simply not enforced by Kubernetes)
 - ✅ Configurable. Users can extend, customize, or disable policies to fit their environment (airgapped, proxied, etc.)
+- ✅ Meets the OCP 5+ requirement for shipping NetworkPolicies with operator-managed workloads
+- ✅ No CRD or API changes needed. Leverages the additive nature of Kubernetes NetworkPolicies, so extensibility comes for free
+- ✅ Per-component policy granularity provides defense-in-depth (e.g., PostgreSQL locked down to minimal egress while the RHDH backend gets broader HTTPS access)
 
 ### Negative
 - ❌ Users must create their own additional NetworkPolicies for site-specific egress (SCMs, CI/CD, registries, auth providers, etc.). The base policies do not cover these, which requires awareness and documentation
