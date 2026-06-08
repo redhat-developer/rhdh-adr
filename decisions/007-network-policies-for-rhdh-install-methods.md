@@ -108,7 +108,7 @@ Add tailored NetworkPolicies to all RHDH install methods (both the operands mana
 
 ### Neutral
 - ⚖️ On clusters where administrators purposely do not enforce NetworkPolicies (e.g., no NetworkPolicy-capable CNI plugin configured), these policies will have no effect at all. The policies are created but not enforced, so existing behavior is completely unchanged
-- ⚖️ The Orchestrator-specific NetworkPolicies already in place will need to be reconciled with the new base policies to avoid duplication or conflicts
+- ⚖️ The existing Orchestrator NetworkPolicies (in both `rhdh-operator` and `rhdh-chart`) currently use `podSelector: {}` (namespace-wide), which contradicts the label-scoped principle adopted in this ADR. These policies will need to be rewritten to use RHDH-specific label selectors. This is a breaking change for existing Orchestrator deployments that rely on the current namespace-wide policies
 - ⚖️ OLM-managed NetworkPolicies for the operator pod itself remain out of scope until OLM support is backported ([RHDHPLAN-351](https://redhat.atlassian.net/browse/RHDHPLAN-351))
 - ⚖️ The RHDH must-gather should be updated to collect NetworkPolicies in place, so as to help troubleshoot potential connectivity failures caused by overly restrictive or misconfigured policies
 
