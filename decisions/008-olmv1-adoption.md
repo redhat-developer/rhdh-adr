@@ -15,15 +15,12 @@ The OLM team is actively encouraging early adoption. This decision is informed b
 | E2E tests | 1/7 passed (6 route-delete timeouts — under investigation) |
 | In-place upgrade (v1.7→v1.9) | BLOCKED by CRD upgrade safety validation |
 
-Full investigation details, command output, and manifests are in a separate [spike report document](https://docs.google.com/document/d/TODO).
-
 **Who is impacted**:
 - RHDH users on OCP 4.18+ who want to install via OLM v1
 - RHDH users on future OCP 5.x where OLM v1 is the default
 - The operator team maintaining build tooling, tests, and CRD schemas
 
 **Constraints**:
-- Must maintain backward compatibility with OLM v0 during the transition period
 - CRD evolution across versions (v1alpha1–v1alpha5) must pass OLM v1's CRD upgrade safety validation
 - Build tooling must produce File-Based Catalog (FBC) images — OLM v1 rejects SQLite catalogs
 
@@ -35,19 +32,19 @@ Adopt OLM v1 for the RHDH operator by addressing the blockers identified during 
 
 2. **Fix CRD schemas to pass upgrade safety validation** — OLM v1 blocks upgrades when it detects type changes between CRD versions. Fields in v1alpha3/v1alpha4 have explicit types (`string`, `integer`, `array`) that are absent in v1alpha5. Rather than restoring deprecated fields in v1alpha5, require users on older API versions to migrate to v1alpha5 before upgrading to an OLM v1-managed operator version. Engage the OLM team to confirm whether these changes are genuinely breaking or if the safety check is overly strict for this pattern.
 
-3. **Use `catalogFilter` in all OLM v1 manifests** — Without it, OLM v1 resolves across all catalogs and may pick a published version over a custom build.
+3. **Use `catalogFilter` in CI and manual-testing manifests** — When deploying a custom-built operator alongside default Red Hat catalogs, OLM v1 resolves across all catalogs and picks the highest semver match. Without `catalogFilter`, a dev build loses to the published version. All test/CI ClusterExtension manifests must pin to the custom catalog.
 
 4. **Add namespace override to E2E tests** — Tests hardcode `_namespace = "rhdh-operator"`, but OLM v1 deploys into whichever namespace is specified. Add a `BACKSTAGE_OPERATOR_NAMESPACE` env var override.
 
 5. **Investigate E2E route-delete timeout failures** — 6/7 E2E tests fail on route-deletion timeout. Run the same tests against OLM v0 on the same cluster to isolate whether this is OLM v1-specific.
 
-6. **Update `install-rhdh-catalog-source.sh` for OLM v1** — The CI/manual-testing script creates OLM v0 resources only. Add an OLM v1 code path that detects the `clusterextensions.olm.operatorframework.io` CRD and creates ClusterCatalog + ClusterExtension instead of CatalogSource + Subscription. Preserve the OLM v0 fallback for older clusters.
+6. **Update `install-rhdh-catalog-source.sh` for OLM v1** — The CI/manual-testing script creates OLM v0 resources only (CatalogSource, Subscription, OperatorGroup). Replace with OLM v1 equivalents: ClusterCatalog + ClusterExtension + ServiceAccount.
 
-7. **Update `prepare-restricted-environment.sh` for OLM v1** — Same OLM v0-only gap as item 6. The image mirroring infrastructure is OLM-agnostic; only the final resource creation (CatalogSource → ClusterCatalog, Subscription → ClusterExtension) needs an OLM v1 path. Needs live airgap testing.
+7. **Update `prepare-restricted-environment.sh` for OLM v1** — Same OLM v0-only gap as item 6. The image mirroring infrastructure is OLM-agnostic; only the final resource creation needs to switch from CatalogSource/Subscription to ClusterCatalog/ClusterExtension.
 
-8. **Update orchestrator Helm templates in rhdh-chart** — Subscription and OperatorGroup templates for Serverless, Serverless Logic, GitOps, and Pipelines operators need ClusterExtension equivalents with a Helm value to toggle between OLM v0/v1.
+8. **Update orchestrator Helm templates in rhdh-chart** — Replace Subscription and OperatorGroup templates for Serverless, Serverless Logic, GitOps, and Pipelines operators with ClusterExtension equivalents.
 
-9. **Update CI pipeline operator installation in rhdh** — The `operator::install_pipelines()` function uses OLM v0 Subscriptions. Add OLM v1 detection and ClusterExtension fallback.
+9. **Update CI pipeline operator installation in rhdh** — The `operator::install_pipelines()` function uses OLM v0 Subscriptions. Replace with ClusterExtension-based installation.
 
 ## Alternatives Considered
 
