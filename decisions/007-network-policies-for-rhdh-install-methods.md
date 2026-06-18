@@ -16,23 +16,16 @@ Unlike typical workloads with known, predictable network flows, RHDH is a platfo
 
 ### Disconnected/airgapped environments
 
-From a NetworkPolicy perspective, disconnected environments do not change the structure of the policies. The same traffic flows exist (plugin registries, SCM, authentication, proxied services), but the destinations are internal mirrors and services rather than public endpoints, with different CIDRs. The base broad HTTPS egress rule (port 443) covers most internal endpoints that serve over HTTPS. Users only need to configure their own additive NetworkPolicies for internal endpoints on non-standard ports or protocols.
+From a NetworkPolicy perspective, disconnected environments do not change the structure of the policies. The same traffic flows exist (plugin registries, SCM, authentication, proxied services), but the destinations are internal mirrors and services rather than public endpoints, with different CIDRs. Since the specific internal endpoints vary per deployment, any egress policies must accommodate site-specific destinations that cannot be known in advance.
 
 Note that container image pulls (for the RHDH pod images themselves) happen at the container runtime level and are **not** affected by NetworkPolicies, which are only about pod-to-pod networking.
-
-### Advanced deployment scenarios
-
-These introduce additional traffic flows that policies must account for:
-
-- **Lightspeed (enabled by default since RHDH 1.10)**: Lightspeed adds a sidecar container to the RHDH pod that might need egress to LLM inference endpoints. Since NetworkPolicies apply at the pod level (not per container), the egress policies on the RHDH pod govern the sidecar's traffic as well. HTTPS-based LLM endpoints are already covered by the base broad HTTPS egress rule. If Lightspeed is configured with endpoints on non-standard ports, flavour-conditional or user-managed additive policies would be needed.
-- **Orchestrator (opt-in)**: The Orchestrator flavor introduces cross-namespace traffic flows with OpenShift Serverless and Serverless Logic operators, and its SonataFlow components (Data Index, Job Service) connect back to RHDH's PostgreSQL. Users may also bring their own external SonataFlowPlatform, requiring egress to endpoints in a different namespace or outside the cluster.
-- **External database**: RHDH supports connecting to an external PostgreSQL instance that may live outside of the cluster. Egress policies scoped to in-namespace pods would block this connection.
 
 ### Key constraints
 - NetworkPolicies must not break existing RHDH functionality on any supported platform
 - Deployment must not fail on clusters without NetworkPolicy-capable CNI plugins. But Kubernetes already handles this gracefully as policies will be created but not enforced
 - The RHDH Operator itself is installed via OLM, and OLM NetworkPolicy support is still being backported (tracked separately in [RHDHPLAN-351](https://redhat.atlassian.net/browse/RHDHPLAN-351)). This ADR covers only the operands managed by the operator and the Helm chart resources
 - Policies must be flexible enough for disconnected environments. Users must be able to allowlist their internal endpoints without modifying the default policies directly
+- Advanced deployment scenarios (Lightspeed sidecars, Orchestrator cross-namespace flows, external databases) introduce additional traffic patterns that policies must account for, including cross-namespace communication and egress on non-standard ports
 
 ## Decision
 
@@ -76,7 +69,7 @@ Add tailored NetworkPolicies to all RHDH install methods (both the operands mana
 
 ### Alternative 4: Ingress-only policies by default, egress as opt-in
 - **Approach**: Ship only ingress policies (restricting which pods can reach RHDH) and leave egress unrestricted by default. Egress lockdown would be an opt-in hardening step for security-focused teams.
-- **Rejected because**: Ingress-only policies address lateral movement but leave the outbound attack surface completely open. A compromised RHDH pod could still exfiltrate data or communicate with unauthorized destinations. [OCPSTRAT-819](https://redhat.atlassian.net/browse/OCPSTRAT-819) requires the default supported setup to be secure out of the box, covering both ingress and egress. The base egress policies cover the most common traffic flows (HTTPS on port 443) for officially supported plugins (GA and TP). Plugins or features that require non-standard ports or protocols may need flavour-conditional or user-managed additive policies. Only users with custom or community plugins that target endpoints not covered by the base or flavour-conditional policies would need to add their own rules.
+- **Rejected because**: Ingress-only policies address lateral movement but leave the outbound attack surface completely open. A compromised RHDH pod could still exfiltrate data or communicate with unauthorized destinations. [OCPSTRAT-819](https://redhat.atlassian.net/browse/OCPSTRAT-819) requires the default supported setup to be secure out of the box, covering both ingress and egress. The base egress policies cover the most common traffic flows (HTTPS on port 443). Any plugin configured with endpoints on non-standard ports or protocols would need flavour-conditional or user-managed additive policies.
 
 ### Alternative 5: Use AdminNetworkPolicy (ANP) / BaselineAdminNetworkPolicy (BANP) instead of standard NetworkPolicies
 - **Approach**: Use the AdminNetworkPolicy (ANP) or BaselineAdminNetworkPolicy (BANP) resources, as recommended for consideration by the parent outcome [HPSTRAT-104](https://redhat.atlassian.net/browse/HPSTRAT-104).
@@ -90,18 +83,17 @@ Add tailored NetworkPolicies to all RHDH install methods (both the operands mana
 
 ### Positive
 - ✅ Enforces least-privilege network access by default, reducing the attack surface for RHDH deployments
-- ✅ Addresses the risk identified in the OCP Threat Model ([OCPSTRAT-819](https://redhat.atlassian.net/browse/OCPSTRAT-819))
+- ✅ Addresses the risk identified in the OCP Threat Model ([OCPSTRAT-819](https://redhat.atlassian.net/browse/OCPSTRAT-819)) and meets the OCP 5+ requirement for shipping NetworkPolicies with operator-managed workloads
 - ✅ Works transparently on OCP, which enforces NetworkPolicies out of the box. No user action required
 - ✅ Does not break deployments on clusters without NetworkPolicy enforcement (policies are created but simply not enforced by Kubernetes)
 - ✅ Configurable. Users can extend and customize policies to fit their environment (airgapped, proxied, etc.)
-- ✅ Meets the OCP 5+ requirement for shipping NetworkPolicies with operator-managed workloads
 - ✅ No CRD or API changes needed. Leverages the additive nature of Kubernetes NetworkPolicies, so extensibility comes for free
 - ✅ Per-component policy granularity provides defense-in-depth (e.g., PostgreSQL locked down to minimal egress while the RHDH backend gets broader HTTPS access)
 
 ### Negative
 - ❌ While the base policies allow broad HTTPS egress (port 443), users must create their own additional NetworkPolicies for site-specific egress on non-standard ports or protocols. This requires awareness and documentation
 - ❌ Users on non-OCP platforms must ensure their CNI plugin supports NetworkPolicy enforcement. Otherwise, policies exist but provide no actual protection, which requires clear documentation to avoid a false sense of security
-- ❌ Adds complexity to the Operator and Helm chart codebases. Policies must be kept in sync with any changes to RHDH pod labels, ports, or component architecture, and must account for optional features (Lightspeed sidecars, Orchestrator cross-namespace flows, external databases)
+- ❌ Adds complexity to the Operator and Helm chart codebases. Policies must be kept in sync with any changes to RHDH pod labels, ports, or component architecture, and must account for configurable features (Lightspeed sidecars enabled by default, Orchestrator cross-namespace flows, external databases)
 - ❌ Requires testing across all supported platforms (OCP, EKS, AKS, GKE) and across deployment variants (with/without Lightspeed, Orchestrator, external database) to validate that policies do not inadvertently block legitimate traffic
 - ❌ On clusters that enforce NetworkPolicies (e.g., OCP), upgrading to a version that ships these base policies will introduce a default-deny for RHDH pods. Existing deployments that rely on egress to endpoints not covered by the base policies (SCMs, auth providers, registries, etc.) will experience connectivity failures unless users create their own additive NetworkPolicies before or during the upgrade. This upgrade impact must be clearly communicated in release notes and migration guides, including ready-to-use NetworkPolicy templates for common egress scenarios and steps to verify connectivity after the upgrade
 
