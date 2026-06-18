@@ -16,17 +16,9 @@ Unlike typical workloads with known, predictable network flows, RHDH is a platfo
 
 ### Disconnected/airgapped environments
 
-In these environments, RHDH cannot reach public endpoints and instead relies on internal infrastructure. The egress traffic flows affected include:
-
-- **OCI plugin installation**: RHDH may need to dynamically fetch plugins from container registries or NPM registries. In disconnected environments, this traffic targets an internal mirror registry rather than the public registry, and policies must allow egress to that mirror
-- **Source control access**: Plugins like the Catalog backend fetch repository content (e.g., `catalog-info.yaml` files) from SCM providers. In disconnected environments, this is a local GitLab/Gitea/etc. instance rather than a public provider like GitHub.
-- **Authentication providers**: OIDC/OAuth flows require egress to the identity provider. In disconnected environments, this is typically an internal Keycloak or RHSSO instance
-- **Proxy endpoints**: The RHDH proxy may need to forward requests to arbitrary backend services configured by the user, many of which may be internal-only in disconnected setups
-- **Custom scaffolder actions**: Software Templates may call internal CI/CD systems, artifact registries, or other internal APIs
+From a NetworkPolicy perspective, disconnected environments do not change the structure of the policies. The same traffic flows exist (plugin registries, SCM, authentication, proxied services), but the destinations are internal mirrors and services rather than public endpoints, with different CIDRs. Since the specific internal endpoints vary per deployment, default egress policies cannot hardcode destinations. Users must configure their own additive NetworkPolicies to allow egress to their site-specific internal endpoints.
 
 Note that container image pulls (for the RHDH pod images themselves) happen at the container runtime level and are **not** affected by NetworkPolicies, which are only about pod-to-pod networking.
-
-Since the specific internal endpoints vary per deployment, default egress policies cannot enumerate them. The policies must therefore either be broadly permissive on common ports (443, 8443, etc.) or provide a clear configuration surface for users to add their site-specific endpoints.
 
 ### Advanced deployment scenarios
 
