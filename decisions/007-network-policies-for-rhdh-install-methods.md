@@ -12,6 +12,8 @@ The absence of NetworkPolicies was identified as a risk in the OCP Threat Model 
 
 Additionally, RHDH is supported across multiple Kubernetes platforms (OCP, EKS, AKS, GKE), each with different levels of default NetworkPolicy enforcement. OCP enforces NetworkPolicies out of the box, but other platforms may require users to configure a compatible CNI plugin.
 
+Unlike typical workloads with known, predictable network flows, RHDH is a platform whose egress patterns are largely defined by its plugins. Even officially supported plugins can be configured with customer-specific endpoints (e.g., a self-hosted GitLab instance, an internal artifact registry, a corporate OIDC provider), making egress destinations unpredictable. This fundamentally limits how restrictive the base egress policies can be.
+
 ### Disconnected/airgapped environments
 
 In these environments, RHDH cannot reach public endpoints and instead relies on internal infrastructure. The egress traffic flows affected include:
