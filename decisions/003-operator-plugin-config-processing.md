@@ -56,6 +56,9 @@ Move plugin configuration processing from init container to operator reconciliat
    - Fail reconciliation on validation errors (fail fast)
 
 5. **Backward compatibility**:
+   - Feature gated by CR annotation `rhdh.redhat.com/plugin-processing: "operator"`
+   - Default: absent or any other value → existing init container behavior
+   - Enables gradual rollout and easy rollback; annotation to be removed once stable
    - Existing init container works without modification
    - When operator provides merged configs → init container only downloads packages (merge steps become no-ops)
    - Helm deployments continue working (no operator configs provided, init container performs full merge as before)
