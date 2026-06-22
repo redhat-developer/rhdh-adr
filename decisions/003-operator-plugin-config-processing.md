@@ -29,9 +29,8 @@ Move plugin configuration processing from init container to operator reconciliat
 **Implementation approach:**
 
 1. **Catalog readiness check**:
-   - DHPC (from ADR-002) populates `default-dynamic-plugins` ConfigMap with merged catalog data
-   - DHPC creates `.catalogs-ready` marker file in ConfigMap when ready
-   - Backstage controller checks for `.catalogs-ready` file before proceeding
+   - DHPC creates `.catalogs-ready` marker entry in default-config when ready
+   - Backstage controller checks for `.catalogs-ready` entry before proceeding
    - If not ready → requeue with status "waiting for catalog"
    - For local development (`make run`), static files with pre-created marker are used
 
@@ -79,7 +78,7 @@ Move plugin configuration processing from init container to operator reconciliat
 
 ```
 Operator Reconciliation:
-├─ 1. Check for .catalogs-ready marker file in default-config
+├─ 1. Check for .catalogs-ready marker entry in default-config
 │    └─ If not ready: Requeue with status "waiting for catalog"
 ├─ 2. Load plugin configs from default-config (populated by DHPC)
 ├─ 3. Load flavour configs (if applicable)
@@ -134,7 +133,7 @@ Operator resolves `backstage-plugin-techdocs` to full URL from catalog, validate
 
 ### Neutral
 
-⚖️ **Catalog readiness**: Backstage controller waits for `.catalogs-ready` marker file (simple file-based contract with DHPC)
+⚖️ **Catalog readiness**: Backstage controller waits for `.catalogs-ready` marker entry (simple contract with DHPC)
 ⚖️ **Plugin name extraction**: Operator must parse package URLs to extract plugin names (format-specific logic)
 ⚖️ **Init container still needed**: Operator provides configs but init container still downloads packages (can be optimized later with lightweight replacement)
 ⚖️ **Reuses existing merge logic**: No changes to `MergePluginsData` or `mergeDynamicPlugins` - just different input source
