@@ -49,14 +49,13 @@ Introduce **DevHubPluginCatalog** as a cluster-scoped Custom Resource Definition
    - Extra catalogs MAY include `dynamic-plugins.default.yaml` (optional)
 
 5. **Default-config integration**:
-   - DHPC merges all catalogs and writes to the existing `default-dynamic-plugins` ConfigMap
-   - Updates `dynamic-plugins.yaml` entry with resolved plugin data (replaces `includes:` reference)
-   - Creates `.catalogs-ready` marker file in the ConfigMap when ready
-   - Backstage controller checks for `.catalogs-ready` file before proceeding
+   - DHPC merges all catalogs and updates `dynamic-plugins.yaml` entry in default-config
+   - Creates `.catalogs-ready` marker entry in default-config when ready
+   - Backstage controller checks for `.catalogs-ready` entry before proceeding
    - For local development (`make run`), static files with pre-created `.catalogs-ready` are used
 
 6. **Air-gap support**:
-   - `default-dynamic-plugins-original` ConfigMap with original URLs (for image discovery)
+   - Separate default-config with original URLs for image discovery
    - Generated only if any catalog has `spec.mirror` configured
 
 **Example:**
