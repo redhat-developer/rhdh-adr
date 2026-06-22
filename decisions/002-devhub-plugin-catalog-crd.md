@@ -30,29 +30,34 @@ Introduce **DevHubPluginCatalog** as a cluster-scoped Custom Resource Definition
 
 1. **Cluster-scoped CRD**:
    - `DevHubPluginCatalog` resources visible cluster-wide
-   - Catalog controller reconciles catalog resources
+   - DHPC controller reconciles catalog resources
    - One catalog resource can serve multiple Backstage instances
 
 2. **Catalog lifecycle**:
    - Fetch catalog from OCI source (`spec.source.oci`)
-   - Extract `dynamic-plugins.default.yaml` (if any) from catalog
-   - If `spec.mirror` specified
-     - Apply mirror configuration
-     - Generate two ConfigMaps per catalog (to simplify usage with mirrored and original URLs)
+   - Extract `dynamic-plugins.default.yaml` from catalog artifact
+   - If `spec.mirror` specified, apply mirror configuration to URLs
 
 3. **Primary RHDH catalog auto-creation**:
-    - Default DevHubPluginCatalog resource included in operator installation
-    - Created automatically when operator is installed 
+   - Default DevHubPluginCatalog resource included in operator installation
+   - Created automatically when operator is installed
 
 4. **Multi-catalog support**:
    - Users can create additional DevHubPluginCatalog resources
-   - Operator automatically discovers all catalogs (no explicit references needed)
+   - DHPC automatically discovers and merges all catalogs
    - Primary catalog MUST include `dynamic-plugins.default.yaml`
    - Extra catalogs MAY include `dynamic-plugins.default.yaml` (optional)
 
-5. **ConfigMap generation**:
-   - `<catalog-name>-catalog`: Plugin config with original or mirrored (if 'spec.mirror' specified) URLs (used at runtime)
-   - `<catalog-name>-catalog-original`: Plugin config with original URLs (for image discovery, generated only if 'spec.mirror' specified)
+5. **Default-config integration**:
+   - DHPC merges all catalogs and writes to the existing `default-dynamic-plugins` ConfigMap
+   - Updates `dynamic-plugins.yaml` entry with resolved plugin data (replaces `includes:` reference)
+   - Creates `.catalogs-ready` marker file in the ConfigMap when ready
+   - Backstage controller checks for `.catalogs-ready` file before proceeding
+   - For local development (`make run`), static files with pre-created `.catalogs-ready` are used
+
+6. **Air-gap support**:
+   - `default-dynamic-plugins-original` ConfigMap with original URLs (for image discovery)
+   - Generated only if any catalog has `spec.mirror` configured
 
 **Example:**
 
@@ -104,18 +109,19 @@ status:
 
 ### Positive
 
-✅ **Air-gap discovery**: Original URLs preserved in `-catalog-original` ConfigMap for image mirroring workflows
+✅ **Air-gap discovery**: Original URLs preserved in `-original` ConfigMap for image mirroring workflows
 ✅ **Multi-catalog support**: Combine RHDH catalog with custom/third-party catalogs automatically
 ✅ **Cluster-wide reuse**: One catalog resource serves all Backstage instances in cluster
 ✅ **Kubernetes-native**: Managed via kubectl, visible in cluster, follows CRD patterns
 ✅ **Declarative mirroring**: Mirror config in catalog spec, applied consistently
 ✅ **Early inspection**: Catalog content visible before any Backstage instance deployed
 ✅ **Status reporting**: Catalog fetch failures visible in CRD status, not buried in pod logs
+✅ **Seamless local development**: `make run` works with static files, no DHPC needed for testing
+✅ **Backstage controller unchanged**: Reads from default-config as before, catalog-agnostic
 
 ### Negative
 
 ❌ **Cluster-scoped permissions**: Creating catalogs requires cluster-admin or cluster-scoped RBAC (not namespace-scoped)
-❌ **ConfigMap proliferation**: 2 ConfigMaps per catalog in Air-gap case(mirrored + original) - can be avoided but having it is more convenient
 ❌ **Version coupling**: Catalogs tied to RHDH versions (must upgrade catalogs with operator) - but it is what is used anyway
 ❌ **Additional CRD**: More resources to learn, manage, and troubleshoot
 
@@ -123,7 +129,8 @@ status:
 
 ⚖️ **Automatic discovery**: All catalogs discovered automatically (no explicit references), trade-off between convenience and explicit control
 ⚖️ **Primary catalog guaranteed**: Operator installation includes primary catalog (reduces setup, but adds mandatory resource)
-⚖️ **Dual ConfigMap pattern for Air-gap**: Separate mirrored/original URLs enable air-gap while preserving source information
+⚖️ **Single merged ConfigMap**: DHPC merges all catalogs into one ConfigMap (simpler for Backstage controller, but hides per-catalog details)
+⚖️ **Readiness marker file**: `.catalogs-ready` file signals readiness (simple file-based contract between DHPC and Backstage controller)
 ⚖️ **Catalog immutability**: Once created, catalog content changes only via re-fetch (predictable but requires explicit refresh)
 
 ## Notes
