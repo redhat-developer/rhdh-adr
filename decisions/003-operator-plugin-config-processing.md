@@ -36,9 +36,12 @@ Move plugin configuration processing from init container to operator reconciliat
    - Merge in order: catalogs → flavours → user overrides
 
 2. **Short identifier resolution**:
-   - Detect package format: `oci://`, 'npm://', "./" → full URL (used as-is)
-   - "ref://" → short identifier (catalog lookup for OCI package URL)
-   - Resolve short identifiers by searching configured catalogs (returns OCI URL from catalog)
+   - Detect package format:
+     - `oci://...` → OCI registry URL (used as-is)
+     - `@scope/name` or standard npm package name → NPM package (used as-is)
+     - `./...` → local path (used as-is)
+     - `ref://...` → short identifier (catalog lookup)
+   - Resolve short identifiers by searching configured catalogs (returns full package URL from catalog)
    - Strict validation: fail on unknown identifiers (protects against typos)
    - No version overrides with short identifiers (use catalog version exactly)
 
@@ -122,7 +125,7 @@ Operator resolves `backstage-plugin-techdocs` to full URL from catalog, validate
 
 ⚖️ **Catalog dependency**: Config processing depends on DevHubPluginCatalog availability (coupled to ADR-002)
 ⚖️ **Plugin name extraction**: Operator must parse package URLs to extract plugin names (format-specific logic)
-⚖️ **Init container still needed**: Operator provides configs but init container still downloads packages (can be optimized later with lightweight replacement). Having this dependency until support more than just "oci://"
+⚖️ **Init container still needed**: Operator provides configs but init container still downloads packages (can be optimized later with lightweight replacement)
 
 ## Notes
 
