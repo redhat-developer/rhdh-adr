@@ -28,61 +28,72 @@ Move plugin configuration processing from init container to operator reconciliat
 
 **Implementation approach:**
 
-1. **Operator config merging**:
-   - Discover all DevHubPluginCatalog resources automatically (from ADR-002)
-   - Load plugin configs from catalog ConfigMaps (mirrored versions)
+1. **Catalog readiness check**:
+   - DHPC (from ADR-002) populates `default-dynamic-plugins` ConfigMap with merged catalog data
+   - DHPC creates `.catalogs-ready` marker file in ConfigMap when ready
+   - Backstage controller checks for `.catalogs-ready` file before proceeding
+   - If not ready → requeue with status "waiting for catalog"
+   - For local development (`make run`), static files with pre-created marker are used
+
+2. **Operator config merging**:
+   - Load plugin configs from default-config (already merged by DHPC)
    - Load flavour configs (from ADR-001 flavour system)
    - Load user configs from ConfigMap (if specified in Backstage CR)
-   - Merge in order: catalogs → flavours → user overrides
+   - Merge in order: default-config (catalogs) → flavours → user overrides
+   - Reuses existing `MergePluginsData` function and `mergeDynamicPlugins` pattern
 
-2. **Short identifier resolution**:
+3. **Short identifier resolution**:
    - Detect package format:
      - `oci://...` → OCI registry URL (used as-is)
      - `@scope/name` or standard npm package name → NPM package (used as-is)
      - `./...` → local path (used as-is)
      - `ref://...` → short identifier (catalog lookup)
-   - Resolve short identifiers by searching configured catalogs (returns full package URL from catalog)
+   - Resolve `ref://` by searching default-config (catalog data) for matching plugin
    - Strict validation: fail on unknown identifiers (protects against typos)
    - No version overrides with short identifiers (use catalog version exactly)
 
-3. **Dual ConfigMap generation**:
+4. **Dual ConfigMap generation**:
    - `backstage-dynamic-plugins-<CR name>`: Merged plugin config for init container
-     - Includes resolved (see Short identifier resolution) full package URLs
+     - Includes resolved full package URLs
      - Includes `catalogSource` field for traceability
+     - Enabled plugins only
    - `backstage-appconfig-plugins-<CR-name>`: Extracted `pluginConfig` for Backstage app-config
      - Only plugin configuration (no package/installation info)
-     - Both ConfigMaps includes Enabled plugins only
+     - First in app-config chain (user's app-config overrides plugin defaults)
+     - Enabled plugins only
 
-4. **Early validation**:
+5. **Early validation**:
    - Validate merged config during reconciliation
-   - Report errors, warnings in Backstage CR status 
+   - Report errors, warnings in Backstage CR status
    - Fail reconciliation on validation errors (fail fast)
 
-5. **Backward compatibility**:
+6. **Backward compatibility**:
    - Feature gated by CR annotation `rhdh.redhat.com/plugin-processing: "operator"`
    - Default: absent or any other value → existing init container behavior
    - Enables gradual rollout and easy rollback; annotation to be removed once stable
    - Existing init container works without modification
-   - When operator provides merged configs → init container only downloads packages (merge steps become no-ops)
-   - Helm deployments continue working (no operator configs provided, init container performs full merge as before)
+   - When operator provides merged configs → init container only downloads packages
+   - Helm deployments continue working (no operator, init container performs full merge)
 
 **Example workflow:**
 
 ```
 Operator Reconciliation:
-├─ 1. List all DevHubPluginCatalog resources (cluster-wide)
-├─ 2. Load plugins from <catalog>-catalog ConfigMaps
+├─ 1. Check for .catalogs-ready marker file in default-config
+│    └─ If not ready: Requeue with status "waiting for catalog"
+├─ 2. Load plugin configs from default-config (populated by DHPC)
 ├─ 3. Load flavour configs (if applicable)
 ├─ 4. Load user configs from spec.application.dynamicPluginsConfigMapName
-├─ 5. Merge configs (catalogs → flavours → user)
-├─ 6. Resolve short identifiers → full package URLs
-├─ 7. Validate merged config
+├─ 5. Merge configs (default-config → flavours → user)
+├─ 6. Resolve ref:// short identifiers → full package URLs
+├─ 7. Filter to enabled plugins only
+├─ 8. Validate merged config
 │    ├─ If invalid: Update CR status, fail reconciliation
 │    └─ If valid: Continue
-├─ 8. Generate backstage-dynamic-plugins-<CR name> ConfigMap
-├─ 9. Generate backstage-appconfig-plugins-<CR-name> ConfigMap
-├─ 10. Create/Update Deployment with ConfigMaps mounted
-└─ 11. Update CR status with plugin count, catalog sources
+├─ 9. Generate backstage-dynamic-plugins-<CR name> ConfigMap
+├─ 10. Generate backstage-appconfig-plugins-<CR-name> ConfigMap (first in app-config chain)
+├─ 11. Create/Update Deployment with ConfigMaps mounted
+└─ 12. Update CR status with plugin count, sources
 ```
 
 **Short identifier example:**
@@ -112,20 +123,21 @@ Operator resolves `backstage-plugin-techdocs` to full URL from catalog, validate
 ✅ **Testable**: Unit test config merging logic without container builds
 ✅ **Operator awareness**: Operator knows about plugins (enables future features like dependency validation)
 ✅ **Enables lightweight init container**: Future optimization can replace heavy init container (currently containing Node.js/Python) with minimal package downloader for operator deployments
-✅ **Enables significant simplification of package downloading script** Light logic, potentially no Python needed   
+✅ **Enables significant simplification of package downloading script**: Light logic, potentially no Python needed
+✅ **Seamless local development**: `make run` works with static files, no DHPC needed for testing   
 
 ### Negative
 
 ❌ **Operator complexity**: Config merging logic moves from bash scripts to Go controller code
-❌ **Larger reconciliation loop**: More work during reconciliation (fetch catalogs, merge configs)
 ❌ **Testing burden**: Need comprehensive unit tests for merging logic, edge cases
-❌ **ConfigMap management**: 1 additional ConfigMaps per Backstage instance (app-config)
+❌ **ConfigMap management**: 1 additional ConfigMap per Backstage instance (app-config)
 
 ### Neutral
 
-⚖️ **Catalog dependency**: Config processing depends on DevHubPluginCatalog availability (coupled to ADR-002)
+⚖️ **Catalog readiness**: Backstage controller waits for `.catalogs-ready` marker file (simple file-based contract with DHPC)
 ⚖️ **Plugin name extraction**: Operator must parse package URLs to extract plugin names (format-specific logic)
 ⚖️ **Init container still needed**: Operator provides configs but init container still downloads packages (can be optimized later with lightweight replacement)
+⚖️ **Reuses existing merge logic**: No changes to `MergePluginsData` or `mergeDynamicPlugins` - just different input source
 
 ## Notes
 
@@ -140,5 +152,4 @@ Operator resolves `backstage-plugin-techdocs` to full URL from catalog, validate
   - `oci://host/path/plugin-name:tag` → "plugin-name" (last path segment)
 
 **Open questions for implementation:**
-- Catalog search order: How to prioritize when same plugin exists in multiple catalogs? Do we allow it at all?
-- Config refresh: Should operator re-merge on catalog ConfigMap updates? (Slightly important only for development)
+- Config refresh: Should Backstage controller re-reconcile when default-config changes? (ConfigMap watch or periodic)
