@@ -71,3 +71,4 @@ CI scripts, Helm templates, E2E tests, and other tooling that reference OLM v0 r
 - [RHDH feature: RHDHPLAN-660](https://redhat.atlassian.net/browse/RHDHPLAN-660)
 - [RHDH spike: RHIDP-8656](https://redhat.atlassian.net/browse/RHIDP-8656)
 - [CRD version management: ADR-005](005-crd-version-management.md)
+- [crdify CI integration: RHIDP-8670](https://redhat.atlassian.net/browse/RHIDP-8670)
