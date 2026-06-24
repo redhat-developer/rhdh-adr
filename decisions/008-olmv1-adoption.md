@@ -10,7 +10,7 @@ The OLM team is actively encouraging early adoption. This decision is informed b
 
 | Area | Result |
 |------|--------|
-| Fresh install via ClusterExtension | PASS (with workarounds) |
+| Fresh install via ClusterExtension | PASS (required FBC catalog and catalog selector pinning) |
 | Integration tests | 25/26 passed (1 test-config mismatch) |
 | E2E tests | 1/7 passed (6 route-delete timeouts — under investigation) |
 | In-place upgrade (v1.7→v1.9) | BLOCKED by CRD upgrade safety validation (OLM v1 bug — fixed upstream in OCP 4.22) |
@@ -25,11 +25,11 @@ The OLM team is actively encouraging early adoption. This decision is informed b
 
 ## Decision
 
-Adopt OLM v1 for the RHDH operator by addressing the blocker identified during the spike:
+Adopt OLM v1 for the RHDH operator:
 
 1. **Switch to File-Based Catalog (FBC) images** — Replace the SQLite-based catalog build (`opm index add`) with FBC (`opm init` + `opm render`). OLM v1 catalogd rejects SQLite images, and FBC catalogs work with both OLM v0 (4.17+) and v1.
 
-2. **Re-verify CRD upgrade path on OCP 4.22+** — The CRD upgrade safety failures observed during the spike were caused by an OLM v1 bug ([OCPBUGS-60693](https://issues.redhat.com/browse/OCPBUGS-60693)) where additive, non-breaking schema changes were incorrectly flagged as "unhandled changes." This has been fixed upstream ([operator-controller#2054](https://github.com/operator-framework/operator-controller/pull/2054), [operator-controller#2179](https://github.com/operator-framework/operator-controller/pull/2179)) and verified as resolved on OCP 4.22 nightlies. The upgrade path needs re-verification on a cluster with the fix to confirm no RHDH-side changes are needed.
+2. **Re-verify CRD upgrade path on OCP 4.22+** — The upgrade failure from the spike was an upstream OLM v1 bug ([OCPBUGS-60693](https://issues.redhat.com/browse/OCPBUGS-60693)), now fixed. Re-run the upgrade test on a cluster with the fix to confirm no RHDH-side changes are needed.
 
 CI scripts, Helm templates, E2E tests, and other tooling that reference OLM v0 resources (CatalogSource, Subscription, OperatorGroup) will need to be updated to use OLM v1 equivalents (ClusterCatalog, ClusterExtension, ServiceAccount) as a consequence of this decision.
 
@@ -56,10 +56,6 @@ CI scripts, Helm templates, E2E tests, and other tooling that reference OLM v0 r
 
 ❌ CI scripts, Helm templates, and E2E tests all need updating to use OLM v1 resources (ClusterCatalog, ClusterExtension) — significant surface area
 ❌ Several areas remain unverified: airgap/disconnected installs, plugin infrastructure operators (ArgoCD/Serverless/Pipelines) via OLM v1, namespace install modes (OwnNamespace/SingleNamespace), OperatorConditions absence handling, and automated CI integration
-
-### Neutral
-
-⚖️ CRD upgrade safety validation failures from the spike were an OLM v1 bug (OCPBUGS-60693), now fixed upstream — no RHDH-side CRD changes are expected to be needed
 
 ## References
 
