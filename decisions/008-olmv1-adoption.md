@@ -13,7 +13,7 @@ The OLM team is actively encouraging early adoption. This decision is informed b
 | Fresh install via ClusterExtension | PASS (with workarounds) |
 | Integration tests | 25/26 passed (1 test-config mismatch) |
 | E2E tests | 1/7 passed (6 route-delete timeouts — under investigation) |
-| In-place upgrade (v1.7→v1.9) | BLOCKED by CRD upgrade safety validation |
+| In-place upgrade (v1.7→v1.9) | BLOCKED by CRD upgrade safety validation (OLM v1 bug — fixed upstream in OCP 4.22) |
 
 **Who is impacted**:
 - RHDH users on OCP 4.18+ who want to install via OLM v1
@@ -21,16 +21,15 @@ The OLM team is actively encouraging early adoption. This decision is informed b
 - The operator team maintaining build tooling, tests, and CRD schemas
 
 **Constraints**:
-- CRD evolution across versions (v1alpha1–v1alpha5) must pass OLM v1's CRD upgrade safety validation
 - Build tooling must produce File-Based Catalog (FBC) images — OLM v1 rejects SQLite catalogs
 
 ## Decision
 
-Adopt OLM v1 for the RHDH operator by addressing the two blockers identified during the spike:
+Adopt OLM v1 for the RHDH operator by addressing the blocker identified during the spike:
 
 1. **Switch to File-Based Catalog (FBC) images** — Replace the SQLite-based catalog build (`opm index add`) with FBC (`opm init` + `opm render`). OLM v1 catalogd rejects SQLite images, and FBC catalogs work with both OLM v0 (4.17+) and v1.
 
-2. **Require v1alpha5 migration as a prerequisite for OLM v1-managed upgrades** — OLM v1 blocks upgrades when it detects type mismatches between CRD versions. Fields in v1alpha3/v1alpha4 have explicit types (`string`, `integer`, `array`) that were intentionally removed in v1alpha5. Rather than restoring deprecated fields (which contradicts ADR-005), require users on older API versions to migrate to v1alpha5 before upgrading to an OLM v1-managed operator version.
+2. **Re-verify CRD upgrade path on OCP 4.22+** — The CRD upgrade safety failures observed during the spike were caused by an OLM v1 bug ([OCPBUGS-60693](https://issues.redhat.com/browse/OCPBUGS-60693)) where additive, non-breaking schema changes were incorrectly flagged as "unhandled changes." This has been fixed upstream ([operator-controller#2054](https://github.com/operator-framework/operator-controller/pull/2054), [operator-controller#2179](https://github.com/operator-framework/operator-controller/pull/2179)) and verified as resolved on OCP 4.22 nightlies. The upgrade path needs re-verification on a cluster with the fix to confirm no RHDH-side changes are needed.
 
 CI scripts, Helm templates, E2E tests, and other tooling that reference OLM v0 resources (CatalogSource, Subscription, OperatorGroup) will need to be updated to use OLM v1 equivalents (ClusterCatalog, ClusterExtension, ServiceAccount) as a consequence of this decision.
 
@@ -44,10 +43,6 @@ CI scripts, Helm templates, E2E tests, and other tooling that reference OLM v0 r
 - **Approach**: Keep `opm index add` for OLM v0 and add a parallel FBC build for OLM v1
 - **Rejected because**: SQLite catalogs are deprecated and will be removed from `opm`. FBC catalogs work with both OLM v0 (4.17+) and OLM v1 — a single build path is simpler.
 
-### Restore deprecated fields in v1alpha5 to pass CRD upgrade safety
-- **Approach**: Add back explicit types for `image`, `replicas`, `imagePullSecrets` in v1alpha5 to match v1alpha3/v1alpha4
-- **Rejected because**: These fields were intentionally deprecated and removed. Restoring them contradicts the versioning policy (ADR-005). Requiring v1alpha5 migration as a prerequisite is cleaner.
-
 ## Consequences
 
 ### Positive
@@ -59,14 +54,13 @@ CI scripts, Helm templates, E2E tests, and other tooling that reference OLM v0 r
 
 ### Negative
 
-❌ CRD upgrade safety fix requires coordinating a v1alpha5 migration prerequisite — users on v1alpha3/v1alpha4 must migrate before upgrading to the OLM v1-supported operator version
 ❌ CI scripts, Helm templates, and E2E tests all need updating to use OLM v1 resources (ClusterCatalog, ClusterExtension) — significant surface area
 ❌ Several areas remain unverified: airgap/disconnected installs, plugin infrastructure operators (ArgoCD/Serverless/Pipelines) via OLM v1, namespace install modes (OwnNamespace/SingleNamespace), OperatorConditions absence handling, and automated CI integration
 
 ### Neutral
 
 ⚖️ The `catalogFilter` requirement is an OLM v1 behavior difference affecting all operators, not RHDH-specific
-⚖️ The preflight override (`crdUpgradeSafety.enforcement: None`) remains a functional workaround for users who cannot migrate to v1alpha5 immediately, but should not be a permanent recommendation
+⚖️ CRD upgrade safety validation failures from the spike were an OLM v1 bug (OCPBUGS-60693), now fixed upstream — no RHDH-side CRD changes are expected to be needed
 
 ## References
 
