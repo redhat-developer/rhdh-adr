@@ -12,7 +12,7 @@ The OLM team is actively encouraging early adoption. This decision is informed b
 |------|--------|
 | Fresh install via ClusterExtension | PASS (required FBC catalog and catalog selector pinning) |
 | Integration tests | 25/26 passed (1 test-config mismatch) |
-| E2E tests | 1/7 passed (6 route-delete timeouts — under investigation) |
+| E2E tests | Not a valid signal — suite has no OLM v1 deploy mode; ad-hoc run not OLM v1-specific |
 | In-place upgrade (v1.7→v1.9) | BLOCKED by CRD upgrade safety validation (OLM v1 bug — fixed upstream in OCP 4.22) |
 
 **Who is impacted**:
@@ -55,7 +55,8 @@ CI scripts, Helm templates, E2E tests, and other tooling that reference OLM v0 r
 ### Negative
 
 ❌ CI scripts, Helm templates, and E2E tests all need updating to use OLM v1 resources (ClusterCatalog, ClusterExtension) — significant surface area
-❌ Several areas remain unverified: airgap/disconnected installs, plugin infrastructure operators (ArgoCD/Serverless/Pipelines) via OLM v1, namespace install modes (OwnNamespace/SingleNamespace), OperatorConditions absence handling, and automated CI integration
+❌ Several areas remain unverified: airgap/disconnected installs, plugin infrastructure operators (ArgoCD/Serverless/Pipelines) via OLM v1, namespace install modes (OwnNamespace/SingleNamespace), and OperatorConditions absence handling
+❌ E2E test suite has no first-class OLM v1 deploy mode — a new test mode is needed for valid OLM v1 E2E coverage
 
 ### Neutral
 
