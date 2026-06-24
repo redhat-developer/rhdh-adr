@@ -59,7 +59,6 @@ CI scripts, Helm templates, E2E tests, and other tooling that reference OLM v0 r
 
 ### Neutral
 
-⚖️ The `catalogFilter` requirement is an OLM v1 behavior difference affecting all operators, not RHDH-specific
 ⚖️ CRD upgrade safety validation failures from the spike were an OLM v1 bug (OCPBUGS-60693), now fixed upstream — no RHDH-side CRD changes are expected to be needed
 
 ## References
