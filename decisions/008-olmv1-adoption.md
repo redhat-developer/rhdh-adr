@@ -57,6 +57,10 @@ CI scripts, Helm templates, E2E tests, and other tooling that reference OLM v0 r
 ❌ CI scripts, Helm templates, and E2E tests all need updating to use OLM v1 resources (ClusterCatalog, ClusterExtension) — significant surface area
 ❌ Several areas remain unverified: airgap/disconnected installs, plugin infrastructure operators (ArgoCD/Serverless/Pipelines) via OLM v1, namespace install modes (OwnNamespace/SingleNamespace), OperatorConditions absence handling, and automated CI integration
 
+### Neutral
+
+⚖️ FBC catalogs require OCP 4.17+ — no change from the current support matrix
+
 ## References
 
 - [OLM v1 docs (OCP 4.21)](https://docs.redhat.com/en/documentation/openshift_container_platform/4.21/html/operators/olm-v1)
