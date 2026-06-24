@@ -26,25 +26,13 @@ The OLM team is actively encouraging early adoption. This decision is informed b
 
 ## Decision
 
-Adopt OLM v1 for the RHDH operator by addressing the blockers identified during the spike. The work items are:
+Adopt OLM v1 for the RHDH operator by addressing the two blockers identified during the spike:
 
-1. **Fix Makefile `catalog-build` to produce FBC catalogs** — Replace `opm index add` (SQLite) with `opm init` + `opm render` (FBC). OLM v1 catalogd rejects SQLite images missing the FBC label.
+1. **Switch to File-Based Catalog (FBC) images** — Replace the SQLite-based catalog build (`opm index add`) with FBC (`opm init` + `opm render`). OLM v1 catalogd rejects SQLite images, and FBC catalogs work with both OLM v0 (4.17+) and v1.
 
-2. **Fix CRD schemas to pass upgrade safety validation** — OLM v1 blocks upgrades when it detects type changes between CRD versions. Fields in v1alpha3/v1alpha4 have explicit types (`string`, `integer`, `array`) that are absent in v1alpha5. Rather than restoring deprecated fields in v1alpha5, require users on older API versions to migrate to v1alpha5 before upgrading to an OLM v1-managed operator version. Engage the OLM team to confirm whether these changes are genuinely breaking or if the safety check is overly strict for this pattern.
+2. **Require v1alpha5 migration as a prerequisite for OLM v1-managed upgrades** — OLM v1 blocks upgrades when it detects type mismatches between CRD versions. Fields in v1alpha3/v1alpha4 have explicit types (`string`, `integer`, `array`) that were intentionally removed in v1alpha5. Rather than restoring deprecated fields (which contradicts ADR-005), require users on older API versions to migrate to v1alpha5 before upgrading to an OLM v1-managed operator version.
 
-3. **Use `catalogFilter` in CI and manual-testing manifests** — When deploying a custom-built operator alongside default Red Hat catalogs, OLM v1 resolves across all catalogs and picks the highest semver match. Without `catalogFilter`, a dev build loses to the published version. All test/CI ClusterExtension manifests must pin to the custom catalog.
-
-4. **Add namespace override to E2E tests** — Tests hardcode `_namespace = "rhdh-operator"`, but OLM v1 deploys into whichever namespace is specified. Add a `BACKSTAGE_OPERATOR_NAMESPACE` env var override.
-
-5. **Investigate E2E route-delete timeout failures** — 6/7 E2E tests fail on route-deletion timeout. Run the same tests against OLM v0 on the same cluster to isolate whether this is OLM v1-specific.
-
-6. **Update `install-rhdh-catalog-source.sh` for OLM v1** — The CI/manual-testing script creates OLM v0 resources only (CatalogSource, Subscription, OperatorGroup). Replace with OLM v1 equivalents: ClusterCatalog + ClusterExtension + ServiceAccount.
-
-7. **Update `prepare-restricted-environment.sh` for OLM v1** — Same OLM v0-only gap as item 6. The image mirroring infrastructure is OLM-agnostic; only the final resource creation needs to switch from CatalogSource/Subscription to ClusterCatalog/ClusterExtension.
-
-8. **Update orchestrator Helm templates in rhdh-chart** — Replace Subscription and OperatorGroup templates for Serverless, Serverless Logic, GitOps, and Pipelines operators with ClusterExtension equivalents.
-
-9. **Update CI pipeline operator installation in rhdh** — The `operator::install_pipelines()` function uses OLM v0 Subscriptions. Replace with ClusterExtension-based installation.
+CI scripts, Helm templates, E2E tests, and other tooling that reference OLM v0 resources (CatalogSource, Subscription, OperatorGroup) will need to be updated to use OLM v1 equivalents (ClusterCatalog, ClusterExtension, ServiceAccount) as a consequence of this decision.
 
 ## Alternatives Considered
 
@@ -72,7 +60,7 @@ Adopt OLM v1 for the RHDH operator by addressing the blockers identified during 
 ### Negative
 
 ❌ CRD upgrade safety fix requires coordinating a v1alpha5 migration prerequisite — users on v1alpha3/v1alpha4 must migrate before upgrading to the OLM v1-supported operator version
-❌ CI scripts, Helm templates, and E2E tests all need OLM v1 code paths — significant surface area
+❌ CI scripts, Helm templates, and E2E tests all need updating to use OLM v1 resources (ClusterCatalog, ClusterExtension) — significant surface area
 ❌ Several areas remain unverified: airgap/disconnected installs, plugin infrastructure operators (ArgoCD/Serverless/Pipelines) via OLM v1, namespace install modes (OwnNamespace/SingleNamespace), OperatorConditions absence handling, and automated CI integration
 
 ### Neutral
