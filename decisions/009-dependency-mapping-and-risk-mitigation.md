@@ -8,7 +8,7 @@ The RHDH ecosystem has grown organically from a single Backstage fork into a mul
 
 This matters now because:
 
-- **The plugin lifecycle chain has grown to 8 serial links.** A plugin goes from source code (`rhdh-plugins`) through export tooling (`rhdh-cli`, `rhdh-plugin-export-utils`, `rhdh-plugin-export-overlays`) to individual plugin OCI images, then through catalog index generation (`generateCatalogIndex.py` in `rhdh-plugin-export-overlays` upstream, and the separate `rhdh-plugin-catalog` repo downstream on GitLab) to produce the `plugin-catalog-index` OCI image, then through deployment configuration (`rhdh-chart`, `rhdh-operator`) and finally through runtime installation (`cli-module-install-dynamic-plugins`) before it is available in a running RHDH instance. A break at any link stops delivery.
+- **The plugin lifecycle chain has grown to 8 serial links.** A plugin goes from source code (`rhdh-plugins`) through export tooling (`rhdh-cli plugin export` + `plugin package`, `rhdh-plugin-export-utils`, `rhdh-plugin-export-overlays`) to individual plugin OCI images, then through catalog index generation (`generateCatalogIndex.py` in `rhdh-plugin-export-overlays` upstream, and the separate `rhdh-plugin-catalog` repo downstream on GitLab) to produce the `plugin-catalog-index` OCI image, then through deployment configuration (`rhdh-chart`, `rhdh-operator`) and finally through runtime installation (`cli-module-install-dynamic-plugins`) before it is available in a running RHDH instance. A break at any link stops delivery.
 
 - **Cross-repo coupling is invisible.** Repositories reference each other through container image tags, npm package versions, Helm chart artifacts, raw GitHub URL downloads, and CI workflow calls at `@main` — but none of this is documented. A rename, a deleted file, or a bad push to `main` can silently break a downstream repo's CI or deployment.
 
@@ -123,7 +123,7 @@ Cross-referencing the dependency map with the churn data identifies fragile comp
 | Component | Fan-In | Churn | Why It's Fragile |
 |---|---|---|---|
 | `rhdh-plugin-export-overlays` <-> `rhdh-plugin-export-utils` pipeline | 5 + 1 HARD dependents | 1,521 commits/yr (+100% velocity) | Bidirectional critical coupling with 10+ `@main` workflow calls and no version pinning. Doubled velocity means doubled opportunity for breakage. A bad push to either repo halts all plugin publishing. |
-| `rhdh-cli` | 3 HARD dependents | 119 commits/yr (-50% declining) | A depended-upon component whose commit velocity is declining — indicating it may not be keeping pace with the needs of the 3 repos that depend on its `export-dynamic-plugin` command. Low activity on a critical-path component means bugs and compatibility issues accumulate. |
+| `rhdh-cli` | 3 HARD dependents | 119 commits/yr (-50% declining) | A depended-upon component whose commit velocity is declining — indicating it may not be keeping pace with the needs of the 3 repos that depend on its `export-dynamic-plugin` command. Low activity on a critical-path component means bugs and compatibility issues accumulate. The command is now `rhdh-cli plugin export` (renamed from the older `@janus-idp/cli export-dynamic-plugin`). |
 | `rhidp/Red Hat Developer Hub` (midstream) automation | Aggregates 7 upstream repos | 3,306 commits/yr (77% bot-driven) | Highest raw commit volume in the ecosystem, almost entirely automated. When automation breaks on a repo with this much throughput, the backlog accumulates fast and blocks product releases. |
 | `cli-module-install-dynamic-plugins` (in `rhdh-plugins`) | Every RHDH pod depends on it | Part of rhdh-plugins (1,971 commits/yr, +50%) | Maximum blast radius — every RHDH pod startup runs this in an init container. Recently migrated from Python to TypeScript (1.10+), adding a cross-repo npm dependency where there was previously a self-contained script. Still in the early breakage window. |
 
@@ -188,7 +188,7 @@ The installer was internal to the `rhdh` image. No cross-repo dependency at this
 **After (RHDH 1.10+):**
 ```
 dynamic-plugins.yaml
-  -> install-dynamic-plugins.sh (wrapper in rhdh image)
+  -> install-dynamic-plugins.sh (generated at container build time in Containerfile, not a static file)
     -> @red-hat-developer-hub/cli-module-install-dynamic-plugins
        (TypeScript, published from rhdh-plugins repo)
       -> skopeo (OCI pull) / npm (NPM pull)
@@ -196,7 +196,7 @@ dynamic-plugins.yaml
       -> app-config.dynamic-plugins.yaml (generated output)
 ```
 
-The installer is now an npm package from a different repository, adding a new cross-repo HARD dependency at the most critical runtime junction: init container startup.
+The wrapper script is a 2-line shim generated in `build/containerfiles/Containerfile` (lines 278-296) that runs `exec cli-module-install-dynamic-plugins install "$@"`. The installer is now an npm package from a different repository, adding a new cross-repo HARD dependency at the most critical runtime junction: init container startup.
 
 **The runtime contract is unchanged** — input YAML schema, output file layout, hash-based change detection, lock file behavior, `{{inherit}}` semantics, OCI path auto-detection, registry fallback, and integrity algorithms are all preserved. The package provides two invocation paths (direct `bin/install-dynamic-plugins` and backstage-cli discovery via `createCliModule`), both running the same `installer.ts` pipeline.
 
@@ -222,22 +222,24 @@ For reference, the full chain from plugin source code to running in a pod is now
 ```
 1. rhdh-plugins               Source code (TypeScript plugins)
        |
-2. rhdh-cli                   export-dynamic-plugin command (builds as dynamic package)
+2. rhdh-cli                   `plugin export` command (builds dist-dynamic/) + `plugin package` (wraps into OCI image)
        |
 3. rhdh-plugin-export-utils   CI actions for packaging
        |
 4. rhdh-plugin-export-overlays Per-plugin config, publishes individual plugin OCI images
        |
-5. Catalog index generation   Aggregates plugin metadata + OCI refs into plugin-catalog-index
-   (upstream: generateCatalogIndex.py in rhdh-plugin-export-overlays;
-    downstream: rhdh-plugin-catalog on gitlab.cee.redhat.com)
+5. Catalog index generation   4-step pipeline orchestrated by update-index.sh:
+   (a) bootstrapPluginBuilds.py → (b) generatePluginBuildInfo.py →
+   (c) generateDynamicPluginsDefaultYaml.sh → (d) generateCatalogIndex.py
+   (upstream: rhdh-plugin-export-overlays; downstream: rhdh-plugin-catalog on gitlab.cee.redhat.com)
        |
 6. rhdh-chart / rhdh-operator References RHDH image + catalog index image in deployment config
        |
 7. cli-module-install-dynamic-plugins  Init container reads catalog index, downloads plugins
-   (in rhdh-plugins)
+   (in rhdh-plugins; supports CATALOG_INDEX_IMAGE + EXTRA_CATALOG_INDEX_IMAGES for merging multiple indexes)
        |
-8. rhdh backend               Loads installed plugins from /dynamic-plugins-root/
+8. rhdh backend               Loads plugins via @backstage/backend-dynamic-feature-service scanning
+                              /dynamic-plugins-root/ + receives --config app-config.dynamic-plugins.yaml
 ```
 
 Eight serial links. Each has different ownership and different release cadences. A break at any link stops dynamic plugin delivery to end users.
@@ -248,26 +250,26 @@ The **plugin catalog index** is a critical intermediate component that sits betw
 
 **What the catalog index image contains:**
 - `dynamic-plugins.default.yaml` — the default plugin configuration (which plugins are enabled, their settings)
-- `catalog-entities/marketplace/` — Package CRD entities for the Extensions UI (marketplace)
+- `catalog-entities/extensions/` — Package CRD entities for the Extensions UI (contains `plugins/`, `packages/`, and `collections/` subdirectories)
 - `index.json` — a summary of all plugins with resolved OCI references and metadata
 
 **Two parallel implementations exist:**
 
 | | Upstream (community) | Downstream (product) |
 |---|---|---|
-| **Source** | `rhdh-plugin-export-overlays/scripts/generateCatalogIndex.py` + `generateDynamicPluginsDefaultYaml.sh` | `gitlab.cee.redhat.com/rhidp/rhdh-plugin-catalog` (RH VPN required) |
+| **Source** | `rhdh-plugin-export-overlays/scripts/update-index.sh` orchestrating a 4-step pipeline: `bootstrapPluginBuilds.py` → `generatePluginBuildInfo.py` → `generateDynamicPluginsDefaultYaml.sh` → `generateCatalogIndex.py` | `gitlab.cee.redhat.com/rhidp/rhdh-plugin-catalog` (RH VPN required) |
 | **CI trigger** | GitHub Actions workflow `generate-catalog-index.yaml`, triggered on push to `main`/`release-*` | GitLab CI in the downstream repo |
 | **Output images** | `quay.io/rhdh-community/plugin-catalog-index` (supported tier), `ghcr.io/redhat-developer/rhdh-plugin-export-overlays/plugin-catalog-index` (community tier) | `registry.access.redhat.com/rhdh/plugin-catalog-index` (production), `quay.io/rhdh/plugin-catalog-index` (pre-prod) |
 | **Input** | `workspaces/*/metadata/*.yaml` (Package entities), `default.packages.yaml`, `rhdh-supported-packages.txt`, `rhdh-community-packages.txt` | Overlay repo metadata (synced from upstream) |
 
 **How it is consumed:**
 - The `rhdh-operator` sets `CATALOG_INDEX_IMAGE=quay.io/rhdh/plugin-catalog-index:next` as an environment variable on the init container (see `config/profile/rhdh/default-config/deployment.yaml:72-73`)
-- The `rhdh-chart` configures the catalog index via `global.catalogIndex.image` in `values.yaml` (see `charts/backstage/values.yaml:31-36`)
+- The `rhdh-chart` configures the catalog index via `global.catalogIndex.image` in `values.yaml` with a versioned tag (`rhdh/plugin-catalog-index:1.10`), not a floating tag (see `charts/backstage/values.yaml:31-36`)
 - The `rhdh-local` docker-compose sets `CATALOG_INDEX_IMAGE=quay.io/rhdh/plugin-catalog-index:1.10` in `default.env`
-- At pod startup, `cli-module-install-dynamic-plugins` detects the `CATALOG_INDEX_IMAGE` environment variable, uses `skopeo` to pull and extract the image, reads `dynamic-plugins.default.yaml` to determine which plugins to install by default, and extracts `catalog-entities/` for the Extensions UI
+- At pod startup, `cli-module-install-dynamic-plugins` detects the `CATALOG_INDEX_IMAGE` environment variable (and optionally `EXTRA_CATALOG_INDEX_IMAGES` to merge multiple indexes), uses `skopeo` to pull and extract the image, reads `dynamic-plugins.default.yaml` to determine which plugins to install by default, and extracts `catalog-entities/extensions/` for the Extensions UI
 
 **Why this link is critical:**
-- Without a valid catalog index image, the init container falls back to whatever `dynamic-plugins.yaml` is provided by the user — losing all default plugin configuration and marketplace metadata
+- Without a valid catalog index image, the init container falls back to whatever `dynamic-plugins.yaml` is provided by the user — losing all default plugin configuration and Extensions UI metadata
 - The upstream `generateCatalogIndex.py` script performs OCI registry queries to verify that each plugin image actually exists before including it in the index; a registry outage or credential issue during generation produces a degraded index
 - The downstream `rhdh-plugin-catalog` repo on GitLab is an additional repository not visible in the GitHub dependency graph, creating a blind spot in cross-repo coupling analysis
 - The `plugin-catalog-index:next` floating tag in the operator default config means a bad catalog index build can propagate immediately to all new operator-managed deployments
@@ -282,7 +284,7 @@ The **plugin catalog index** is a critical intermediate component that sits betw
 | `rhdh-operator` | `plugin-catalog-index` image | HARD | Default deployment config sets `CATALOG_INDEX_IMAGE` env var (floating `next` tag) |
 | `rhdh-chart` | `plugin-catalog-index` image | HARD | `values.yaml` references `rhdh/plugin-catalog-index:1.10` |
 | `rhdh-local` | `plugin-catalog-index` image | HARD | `default.env` pins `CATALOG_INDEX_IMAGE` |
-| `cli-module-install-dynamic-plugins` | `plugin-catalog-index` image | HARD | Reads at init container startup to determine default plugins and extract marketplace entities |
+| `cli-module-install-dynamic-plugins` | `plugin-catalog-index` image | HARD | Reads at init container startup to determine default plugins and extract `catalog-entities/extensions/` for the Extensions UI |
 | `rhidp/Red Hat Developer Hub` (midstream) | `rhdh-plugin-catalog` (GitLab) | HARD | Downstream build depends on the downstream catalog index for product releases |
 
 **Risk assessment:**
