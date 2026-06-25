@@ -18,6 +18,7 @@ The OLM team is actively encouraging early adoption. This decision is informed b
 **Who is impacted**:
 - RHDH users on OCP 4.18+ who want to install via OLM v1
 - RHDH users on future OCP 5.x where OLM v1 is the default
+- RHDH users on non-OCP Kubernetes platforms (AKS, EKS, GKE) where OLM is a prerequisite for operator-based installation — these platforms use upstream OLM, so the same FBC and OLM v1 API changes apply
 - The operator team maintaining build tooling, tests, and CRD schemas
 
 **Constraints**:
@@ -60,7 +61,7 @@ CI scripts, Helm templates, E2E tests, and other tooling that reference OLM v0 r
 
 ### Neutral
 
-⚖️ FBC catalogs require OCP 4.17+ — no change from the current support matrix
+⚖️ FBC catalogs have been supported since OCP 4.11 ([release notes](https://docs.redhat.com/en/documentation/openshift_container_platform/4.11/html-single/release_notes/index#ocp-4-11-olm-fbc)) — no change from the current support matrix
 
 ## References
 
