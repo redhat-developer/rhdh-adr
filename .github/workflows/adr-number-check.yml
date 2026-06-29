@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0	
+          fetch-depth: 0
       - name: Validate ADR filenames
         id: validate
         run: |
@@ -99,10 +99,7 @@ jobs:
             echo "EOF" >> "$GITHUB_OUTPUT"
             echo "suggestion=$suggestion" >> "$GITHUB_OUTPUT"
             exit 1
-          fi
-
-          echo "All ADR filenames valid."
-																	
+          fi															
       - name: Comment on PR with suggestion
         if: failure()
         uses: actions/github-script@v7
@@ -113,4 +110,4 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: `## ADR numbering check failed\n\n${{ steps.validate.outputs.error }}`
-	    })
+            })
