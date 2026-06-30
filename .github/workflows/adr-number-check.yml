@@ -1,0 +1,95 @@
+name: ADR Number Check
+on:
+  pull_request:
+    paths:
+      - 'decisions/**'
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  validate-adr-numbers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate ADR filenames
+        id: validate
+        run: |
+          git fetch origin "${{ github.base_ref }}"
+          CHANGED=$(git diff --name-only --diff-filter=AM \
+            "origin/${{ github.base_ref }}...HEAD" -- 'decisions/*.md')
+          mapfile -t existing < <(
+            git ls-tree --name-only "origin/${{ github.base_ref }}" decisions/ \
+              | grep -E '^decisions/[0-9]{3}-.*\.md$' \
+              | sed 's|decisions/||; s/-.*//' \
+              | sort -n
+          )
+          nextAvailable=0
+          while true; do
+            padded=$(printf '%03d' "$nextAvailable")
+            taken=0
+            for ex in "${existing[@]}"; do
+              if [ "$padded" = "$ex" ]; then
+                taken=1
+                break
+              fi
+            done
+            [ "$taken" -eq 0 ] && break
+            nextAvailable=$((nextAvailable + 1))
+          done
+          suggested_prefix=$(printf '%03d' "$nextAvailable")
+          errors=""
+          suggestion=""
+          if [ -z "$CHANGED" ]; then
+            echo "No ADR files changed in this PR."
+            exit 0
+          fi
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            basename=$(basename "$file")
+            if ! [[ "$basename" =~ ^[0-9]{3}-[a-z0-9]+(-[a-z0-9]+)*\.md$ ]]; then
+              errors+="Format invalid: $basename (expected NNN-kebab-case-title.md)\n"
+              suffix="${basename#*-}"
+              suggestion="${suggested_prefix}-${suffix}"
+              continue
+            fi
+            number=$((10#${basename:0:3}))
+            suffix="${basename:4}"
+            if git cat-file -e "origin/${{ github.base_ref }}:$file" 2>/dev/null; then
+              continue
+            fi
+            for ex in "${existing[@]}"; do
+              if [ "$number" -eq "$((10#$ex))" ]; then
+                errors+="Number conflict: $basename already exists on base branch\n"
+                suggestion="${suggested_prefix}-${suffix}"
+              fi
+            done
+            if [ "$number" -ne "$nextAvailable" ]; then
+              errors+="Gap detected: $basename uses $number but next available is $nextAvailable\n"
+              suggestion="${suggested_prefix}-${suffix}"
+            fi
+          done <<< "$CHANGED"
+          if [ -n "$errors" ]; then
+            echo -e "$errors"
+            echo "error<<EOF" >> "$GITHUB_OUTPUT"
+            echo -e "$errors" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            echo "suggestion=$suggestion" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "All ADR filenames valid."
+      - name: Comment on PR with suggestion
+        if: failure()
+        uses: actions/github-script@v7
+        env:
+          ERROR_MSG: ${{ steps.validate.outputs.error }}
+          SUGGESTION: ${{ steps.validate.outputs.suggestion }}
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ADR numbering check failed\n\n${process.env.ERROR_MSG}\n\n**Suggested filename:** \`${process.env.SUGGESTION}\``
+            }) 
