@@ -82,13 +82,14 @@ jobs:
       - name: Comment on PR with suggestion
         if: failure()
         uses: actions/github-script@v7
+        env:
+          ERROR_MSG: ${{ steps.validate.outputs.error }}
+          SUGGESTION: ${{ steps.validate.outputs.suggestion }}
         with:
           script: |
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## ADR numbering check failed
-            ${{ steps.validate.outputs.error }}
-            **Suggested filename:** \`${{ steps.validate.outputs.suggestion }}\``
-            })
+              body: `## ADR numbering check failed\n\n${process.env.ERROR_MSG}\n\n**Suggested filename:** \`${process.env.SUGGESTION}\``
+            }) 
