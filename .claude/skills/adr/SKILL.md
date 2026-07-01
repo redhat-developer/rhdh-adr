@@ -48,14 +48,20 @@ Generate a complete ADR draft from a decision.
 2. Optionally ask for project context if needed: "What's your project repository URL and what does it do?"
 3. Read `ADR-TEMPLATE.md` for structure
 4. Read `ADR-GUIDE.md` for guidelines
-5. Generate complete ADR including:
+5. Determine next ADR number from `decisions/` (run in repo root):
+   ```bash
+   max=$(ls decisions/*.md | grep -oE '[0-9]{3}' | sort -n | tail -1)
+   printf "%03d\n" $((10#${max:-0} + 1))
+   ```
+   Use the result for the filename: `decisions/NNN-kebab-case-title.md`
+6. Generate complete ADR including:
    - **Title**: Short, descriptive (5-10 words)
    - **Context**: Problem statement, who's affected, constraints
    - **Decision**: Clear statement + implementation approach
    - **Alternatives Considered**: 3-4 realistic alternatives with rejection rationale
    - **Consequences**: Honest positive ✅, negative ❌, and neutral ⚖️ impacts
 
-**Output:** Complete ADR ready for review and PR
+**Output:** Complete ADR saved as `decisions/NNN-kebab-case-title.md`, ready for review and PR
 
 ---
 
