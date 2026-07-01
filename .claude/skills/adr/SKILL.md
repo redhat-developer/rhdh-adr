@@ -48,10 +48,36 @@ Generate a complete ADR draft from a decision.
 2. Optionally ask for project context if needed: "What's your project repository URL and what does it do?"
 3. Read `ADR-TEMPLATE.md` for structure
 4. Read `ADR-GUIDE.md` for guidelines
-5. Determine next ADR number from `decisions/` (run in repo root):
+5. Determine next ADR number from `decisions/` (run in repo root). Prefer the lowest missing number in the sequence (e.g. `004` if it is absent), otherwise use `max + 1` — matching the CI check in `.github/workflows/adr-number-check.yml`:
    ```bash
-   max=$(ls decisions/*.md | grep -oE '[0-9]{3}' | sort -n | tail -1)
-   printf "%03d\n" $((10#${max:-0} + 1))
+   existing=()
+   while IFS= read -r num; do
+     existing+=("$num")
+   done < <(
+     ls decisions/*.md 2>/dev/null \
+       | sed 's|.*/||; s/-.*//' \
+       | grep -E '^[0-9]{3}$' \
+       | sort -n
+   )
+   maxNum=0
+   for ex in "${existing[@]}"; do
+     n=$((10#$ex))
+     [ "$n" -gt "$maxNum" ] && maxNum="$n"
+   done
+   next=""
+   for ((i=0; i<=maxNum; i++)); do
+     padded=$(printf '%03d' "$i")
+     found=0
+     for ex in "${existing[@]}"; do
+       [ "$padded" = "$ex" ] && found=1 && break
+     done
+     if [ "$found" -eq 0 ]; then
+       next="$padded"
+       break
+     fi
+   done
+   [ -z "$next" ] && next=$(printf '%03d' $((maxNum + 1)))
+   printf '%s\n' "$next"
    ```
    Use the result for the filename: `decisions/NNN-kebab-case-title.md`
 6. Generate complete ADR including:
