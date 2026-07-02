@@ -53,7 +53,8 @@ Generate a complete ADR draft from a decision.
 4. Read `ADR-GUIDE.md` for guidelines
 
 5. Determine next ADR number from `decisions/` (run in repo root). Prefer the lowest missing number in the sequence (e.g. `004` if it is absent), otherwise use `max + 1` — matching the CI check in `.github/workflows/adr-number-check.yml`:
-Alternatively, run ./suggest-next-adr.sh from the /scripts folder, to let the bash script output an ADR name suggestion for you. Use the result for the filename: `decisions/NNN-kebab-case-title.md`
+Alternatively, run `./suggest-next-adr.sh` from the `/scripts` folder, to get the next ADR number
+Use the result for the filename: `decisions/NNN-kebab-case-title.md`
 
 6. Generate complete ADR including:
    - **Title**: Short, descriptive (5-10 words)
