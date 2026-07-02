@@ -252,9 +252,11 @@ ADRs follow the standard GitHub PR workflow for review and approval. The PR stat
 
 **Filename convention:** `decisions/NNN-kebab-case-title.md` (e.g. `006-plugin-discovery.md`).
 
-To get the next number (lowest gap, then `max + 1` - same logic as CI):
 
+**Use the** `./scripts/suggest-next-adr.sh` **bash script to get the next appropriate ADR name:**
+to get the next number (lowest gap, then `max + 1` - same logic as CI).
 ```bash
+#Bash script that is used to get the next approrpriate ADR name
 ./scripts/suggest-next-adr.sh
 # Create a feature branch
 git checkout -b adr/NNN-my-decision-title
