@@ -1,4 +1,4 @@
-# ADR: Tailored NetworkPolicies for RHDH Install Methods
+# ADR: Tailored NetworkPolicies for RHDH Application Workloads
 
 ## Context
 
@@ -10,26 +10,18 @@ The absence of NetworkPolicies was identified as a risk in the OCP Threat Model 
 - **Egress**: RHDH pods can make unrestricted outbound connections to any destination, increasing the blast radius if a pod is compromised
 - There is no defense-in-depth at the network layer for the most common deployment scenarios
 
-Additionally, RHDH is supported across multiple Kubernetes platforms (OCP, EKS, AKS, GKE), each with different levels of default NetworkPolicy enforcement. OCP enforces NetworkPolicies out of the box, but other platforms may require users to configure a compatible CNI plugin.
-
-Unlike typical workloads with known, predictable network flows, RHDH is a platform whose egress patterns are largely defined by its plugins. Even officially supported plugins can be configured with customer-specific endpoints (e.g., a self-hosted GitLab instance, an internal artifact registry, a corporate OIDC provider), making egress destinations unpredictable. This fundamentally limits how restrictive the base egress policies can be.
-
-### Disconnected/airgapped environments
-
-From a NetworkPolicy perspective, disconnected environments do not change the structure of the policies. The same traffic flows exist (plugin registries, SCM, authentication, proxied services), but the destinations are internal mirrors and services rather than public endpoints, with different CIDRs. Since the specific internal endpoints vary per deployment, any egress policies must accommodate site-specific destinations that cannot be known in advance.
-
-Note that container image pulls (for the RHDH pod images themselves) happen at the container runtime level and are **not** affected by NetworkPolicies, which are only about pod-to-pod networking.
-
 ### Key constraints
 - NetworkPolicies must not break existing RHDH functionality on any supported platform
-- Deployment must not fail on clusters without NetworkPolicy-capable CNI plugins. But Kubernetes already handles this gracefully as policies will be created but not enforced
+- Unlike typical workloads with known, predictable network flows, RHDH is a platform whose egress patterns are largely defined by its plugins. Even officially supported plugins can be configured with customer-specific endpoints (e.g., a self-hosted GitLab instance, an internal artifact registry, a corporate OIDC provider), making egress destinations unpredictable. This fundamentally limits how restrictive the base egress policies can be
+- RHDH is supported across multiple Kubernetes platforms (OCP, EKS, AKS, GKE), each with different levels of default NetworkPolicy enforcement. OCP enforces NetworkPolicies out of the box, but other platforms may require users to configure a compatible CNI plugin
+- Some features and deployment scenarios introduce additional traffic patterns that policies must account for: Lightspeed sidecars (enabled by default since RHDH 1.10), Orchestrator cross-namespace flows, and external databases; each potentially requiring rules for cross-namespace communication or egress on non-standard ports
+- Disconnected/airgapped environments do not change the policy structure; the same traffic flows apply, but destinations point to internal mirrors with different CIDRs. Policies must allow users to allowlist their site-specific endpoints without modifying the defaults directly
 - The RHDH Operator itself is installed via OLM, and OLM NetworkPolicy support is still being backported (tracked separately in [RHDHPLAN-351](https://redhat.atlassian.net/browse/RHDHPLAN-351)). This ADR covers only the operands managed by the operator and the Helm chart resources
-- Policies must be flexible enough for disconnected environments. Users must be able to allowlist their internal endpoints without modifying the default policies directly
-- Advanced deployment scenarios (Lightspeed sidecars, Orchestrator cross-namespace flows, external databases) introduce additional traffic patterns that policies must account for, including cross-namespace communication and egress on non-standard ports
+- Deployment must not fail on clusters without NetworkPolicy-capable CNI plugins. But Kubernetes already handles this gracefully as policies will be created but not enforced
 
 ## Decision
 
-Add tailored NetworkPolicies to all RHDH install methods (both the operands managed by the RHDH Operator and the resources deployed by the Helm chart) to enforce least-privilege pod communication by default.
+Add tailored NetworkPolicies to all RHDH application workloads (both the operands managed by the RHDH Operator and the resources deployed by the Helm chart) to enforce least-privilege pod communication by default.
 
 **Key design principles**:
 
@@ -48,11 +40,11 @@ Add tailored NetworkPolicies to all RHDH install methods (both the operands mana
   - **Always-on base policies**: shipped by the Operator and Helm chart, always present. These cover DNS, API server access, PostgreSQL, broad HTTPS egress for the RHDH backend, and monitoring/metrics scraping
   - **Flavour-conditional policies (auto-managed)**: tied to specific flavours or features. For the Operator, these live in the flavour manifests and are reconciled when the flavour is enabled in the CR. For the Helm chart, they are activated by values (e.g., `orchestrator.enabled=true`, `global.lightspeed.enabled=true`). These are shipped and auto-managed, not user-managed. An example is Orchestrator cross-namespace traffic to OpenShift Serverless and Serverless Logic namespaces
   - **User-managed additive policies**: site-specific policies for endpoints that vary per deployment (external database CIDRs, corporate proxies on custom ports, customer-specific SCM/auth providers, plugin endpoints on non-standard ports, etc.). Users create these as additive NetworkPolicy resources in the same namespace
-- **User-extensible via additive policies**: This three-part split is possible because Kubernetes NetworkPolicies are **additive**: once a default-deny policy selects a pod, any additional NetworkPolicy matching that pod can only add more allow rules, never remove existing ones. Users who need to allow additional site-specific traffic simply create their own NetworkPolicy resources in the same namespace. These compose naturally with the base and flavour-conditional policies without any CRD or Helm values change. The base NetworkPolicies are always present and cannot be disabled. On clusters without NetworkPolicy enforcement, they simply have no effect
+- **User-extensible via additive policies**: Since Kubernetes NetworkPolicies are additive (they can only add allow rules, never remove existing ones), users can extend the base policies by creating their own NetworkPolicy resources in the same namespace without any CRD or Helm values change
 - **Documentation**: Clear documentation is essential to make this approach work in practice. Users need to understand which base policies are shipped, what traffic they allow and deny, how to create additional NetworkPolicies for their site-specific needs, and how to troubleshoot connectivity issues caused by policies. Documentation should also clarify the requirement for a NetworkPolicy-capable CNI plugin on non-OCP platforms, and provide ready-to-use NetworkPolicy templates for common plugin egress scenarios (e.g., GitHub/GitLab SCM access, Quay/Artifactory registries, OIDC providers) that users can copy and adapt for their environment
 - **Label-scoped policies**: Since RHDH is a layered product deployed into potentially shared namespaces, policies use `podSelector` with RHDH-specific labels rather than namespace-wide selectors, following the OCP best practice for layered products. Each NetworkPolicy is scoped to a specific component of a specific instance:
-  - **Operator**: per-CR policies select pods using `rhdh.redhat.com/app: backstage-rhdh-<cr-name>` (RHDH backend) or `rhdh.redhat.com/app: backstage-psql-<cr-name>` (PostgreSQL)
-  - **Helm chart**: per-release policies select pods using the combination of `app.kubernetes.io/instance: <release-name>` and `app.kubernetes.io/component: backstage` (RHDH backend) or `app.kubernetes.io/component: primary` (PostgreSQL)
+  - **Operator**: CR-specific policies select pods using `rhdh.redhat.com/app: backstage-rhdh-<cr-name>` (RHDH backend) or `rhdh.redhat.com/app: backstage-psql-<cr-name>` (PostgreSQL)
+  - **Helm chart**: release-specific policies select pods using the combination of `app.kubernetes.io/instance: <release-name>` and `app.kubernetes.io/component: backstage` (RHDH backend) or `app.kubernetes.io/component: primary` (PostgreSQL)
 - **Operator vs. OLM boundary**: The RHDH Operator manages NetworkPolicies for its operands (RHDH pods, PostgreSQL, etc.) directly. NetworkPolicies for the operator pod itself are out of scope here and will be handled via OLM once support is fully backported ([RHDHPLAN-351](https://redhat.atlassian.net/browse/RHDHPLAN-351))
 
 ## Alternatives considered
@@ -73,8 +65,8 @@ Add tailored NetworkPolicies to all RHDH install methods (both the operands mana
 - **Approach**: Ship only ingress policies (restricting which pods can reach RHDH) and leave egress unrestricted by default. Egress lockdown would be an opt-in hardening step for security-focused teams.
 - **Rejected because**: Ingress-only policies address lateral movement but leave the outbound attack surface completely open. A compromised RHDH pod could still exfiltrate data or communicate with unauthorized destinations. [OCPSTRAT-819](https://redhat.atlassian.net/browse/OCPSTRAT-819) requires the default supported setup to be secure out of the box, covering both ingress and egress. The base egress policies cover the most common traffic flows (HTTPS on port 443). Any plugin configured with endpoints on non-standard ports or protocols would need flavour-conditional or user-managed additive policies.
 
-### Alternative 5: Use AdminNetworkPolicy (ANP) / BaselineAdminNetworkPolicy (BANP) instead of standard NetworkPolicies
-- **Approach**: Use the AdminNetworkPolicy (ANP) or BaselineAdminNetworkPolicy (BANP) resources, as recommended for consideration by the parent outcome [HPSTRAT-104](https://redhat.atlassian.net/browse/HPSTRAT-104).
+### Alternative 5: Use AdminNetworkPolicy (ANP) / BaselineAdminNetworkPolicy (BANP), or ClusterNetworkPolicy (CNP) later, instead of standard NetworkPolicies
+- **Approach**: Use the AdminNetworkPolicy (ANP) or BaselineAdminNetworkPolicy (BANP) resources, or their planned successor ClusterNetworkPolicy (CNP), as seems to be implied by the parent outcome [HPSTRAT-104](https://redhat.atlassian.net/browse/HPSTRAT-104).
 - **Rejected because**: Although ANP and BANP are GA since OCP 4.16 ([OCPSTRAT-939](https://redhat.atlassian.net/browse/OCPSTRAT-939)) and will be available in OCP 5, they are cluster-scoped resources that require cluster-admin privileges to create and manage. The OCP team has [confirmed](https://redhat-internal.slack.com/archives/C06UYJ1K941/p1782138704901079) that operators are expected to ship standard NetworkPolicies, not ANP. Operators typically do not have the permissions to create ANP resources, nor are they expected to. ANP/BANP are designed for platform-level network governance enforced by cluster admins (e.g., to override or tighten policies set by individual operators), not for individual workload self-protection. For the Helm chart path, releases can be deployed by regular cluster users who do not have cluster-admin privileges, so they simply cannot create ANP/BANP resources. They are also not GA in upstream Kubernetes and not universally available across all RHDH-supported platforms (EKS, AKS, GKE). Standard namespace-scoped NetworkPolicies are the appropriate tool for a layered product. Note that cluster admins can still layer ANP/BANP on top of RHDH's standard NetworkPolicies to make policies more or less restrictive as needed, but that is outside RHDH's scope.
 
 ### Alternative 6: Rely solely on documentation and leave NetworkPolicies to the user
@@ -101,8 +93,8 @@ Add tailored NetworkPolicies to all RHDH install methods (both the operands mana
 
 ### Neutral
 - ⚖️ On clusters where administrators purposely do not enforce NetworkPolicies (e.g., no NetworkPolicy-capable CNI plugin configured), these policies will have no effect at all. The policies are created but not enforced, so existing behavior is completely unchanged
-- ⚖️ The existing Orchestrator NetworkPolicies (in both `rhdh-operator` and `rhdh-chart`) currently use `podSelector: {}` (namespace-wide), which contradicts the label-scoped principle adopted in this ADR. These policies will need to be rewritten to use RHDH-specific label selectors. This is a breaking change for existing Orchestrator deployments that rely on the current namespace-wide policies
 - ⚖️ OLM-managed NetworkPolicies for the operator pod itself remain out of scope until OLM support is backported ([RHDHPLAN-351](https://redhat.atlassian.net/browse/RHDHPLAN-351))
+- ⚖️ Container image pulls happen at the container runtime level and are not affected by NetworkPolicies, which only govern pod-to-pod networking
 - ⚖️ The RHDH must-gather should be updated to collect NetworkPolicies in place, so as to help troubleshoot potential connectivity failures caused by overly restrictive or misconfigured policies
 
 ## References
