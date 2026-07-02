@@ -250,12 +250,17 @@ ADRs follow the standard GitHub PR workflow for review and approval. The PR stat
 
 ### 1. **Creating an ADR** → Open PR
 
+**Filename convention:** `decisions/NNN-kebab-case-title.md` (e.g. `006-plugin-discovery.md`).
+
+To get the next number (lowest gap, then `max + 1` - same logic as CI):
+
 ```bash
+./scripts/suggest-next-adr.sh
 # Create a feature branch
-git checkout -b adr/flavor-multi-tenancy
+git checkout -b adr/NNN-my-decision-title
 
 # Copy the template
-cp ADR-TEMPLATE.md decisions/ADR-multi-tenancy.md
+cp ADR-TEMPLATE.md decisions/006-my-decision-title.md
 
 # Write your ADR
 # Fill in: Context, Decision, Consequences, etc.
