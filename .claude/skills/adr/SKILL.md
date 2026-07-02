@@ -45,41 +45,16 @@ Generate a complete ADR draft from a decision.
    - What problem does it solve?
    - Current state/limitations
    - Key requirements or constraints
+
 2. Optionally ask for project context if needed: "What's your project repository URL and what does it do?"
+
 3. Read `ADR-TEMPLATE.md` for structure
+
 4. Read `ADR-GUIDE.md` for guidelines
+
 5. Determine next ADR number from `decisions/` (run in repo root). Prefer the lowest missing number in the sequence (e.g. `004` if it is absent), otherwise use `max + 1` — matching the CI check in `.github/workflows/adr-number-check.yml`:
-   ```bash
-   existing=()
-   while IFS= read -r num; do
-     existing+=("$num")
-   done < <(
-     ls decisions/*.md 2>/dev/null \
-       | sed 's|.*/||; s/-.*//' \
-       | grep -E '^[0-9]{3}$' \
-       | sort -n
-   )
-   maxNum=0
-   for ex in "${existing[@]}"; do
-     n=$((10#$ex))
-     [ "$n" -gt "$maxNum" ] && maxNum="$n"
-   done
-   next=""
-   for ((i=0; i<=maxNum; i++)); do
-     padded=$(printf '%03d' "$i")
-     found=0
-     for ex in "${existing[@]}"; do
-       [ "$padded" = "$ex" ] && found=1 && break
-     done
-     if [ "$found" -eq 0 ]; then
-       next="$padded"
-       break
-     fi
-   done
-   [ -z "$next" ] && next=$(printf '%03d' $((maxNum + 1)))
-   printf '%s\n' "$next"
-   ```
-   Use the result for the filename: `decisions/NNN-kebab-case-title.md`
+Alternatively, run ./suggest-next-adr.sh from the /scripts folder, to let the bash script output an ADR name suggestion for you. Use the result for the filename: `decisions/NNN-kebab-case-title.md`
+
 6. Generate complete ADR including:
    - **Title**: Short, descriptive (5-10 words)
    - **Context**: Problem statement, who's affected, constraints
