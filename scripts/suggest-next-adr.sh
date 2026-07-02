@@ -1,5 +1,33 @@
 #!/bin/bash
 
+
+# finds the ADR file that is being changed in the PR and suggests the next appropriate ADR name suggestion to populate the '/decisions' folder with.
+if [ "${1:-}" = "--ci-suggest" ]; then
+  base_ref="${2:?Usage: suggest-next-adr.sh --ci-suggest <base-ref>}"
+  git fetch origin "${base_ref}"
+  file=$(git diff --name-only --diff-filter=AM "origin/${base_ref}...HEAD" -- 'decisions/*.md' | head -1)
+  if [ -z "$file" ]; then
+    echo "No ADR files changed."
+    exit 0
+  fi
+  basename=$(basename "$file")
+  if [[ "$basename" =~ ^[0-9]{3}- ]]; then
+    suffix="${basename:4}"
+  else
+    suffix="${basename%.md}"
+  fi
+  suffix="${suffix%.md}"
+  next=$(bash "$0")
+  suggestion="- Use \`decisions/${next}-${suffix}\`"
+  {
+    echo "suggestion<<EOF"
+    echo "$suggestion"
+    echo "EOF"
+  } >> "${GITHUB_OUTPUT}"
+  echo "Suggested: decisions/${next}-${suffix}"
+  exit 0
+fi
+
 # This script is used by the GitHub Workflow check and cursor skill to determine the next appropriate ADR name suggestion to populate the '/decisions' folder with.
    
    existing=()

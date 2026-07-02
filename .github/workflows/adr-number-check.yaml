@@ -3,130 +3,37 @@ on:
   pull_request:
     paths:
       - 'decisions/**'
+      - 'scripts/suggest-next-adr.sh'
 permissions:
   contents: read
   pull-requests: write
 jobs:
-  validate-adr-numbers:
+  suggest-adr-number:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Validate ADR filenames
-        id: validate
-        run: |
-          git fetch origin "${{ github.base_ref }}"
-          CHANGED=$(git diff --name-only --diff-filter=AM \
-            "origin/${{ github.base_ref }}...HEAD" -- 'decisions/*.md' | sort)
-          mapfile -t existing < <(
-            git ls-tree --name-only "origin/${{ github.base_ref }}" decisions/ \
-              | grep -E '^decisions/[0-9]{3}-.*\.md$' \
-              | sed 's|decisions/||; s/-.*//' \
-              | sort -n
-          )
-          maxNum=0
-          for ex in "${existing[@]}"; do
-            n=$((10#$ex))
-            [ "$n" -gt "$maxNum" ] && maxNum="$n"
-          done
-          available=()
-          for ((i=0; i<=maxNum; i++)); do
-            padded=$(printf '%03d' "$i")
-            found=0
-            for ex in "${existing[@]}"; do
-              [ "$padded" = "$ex" ] && found=1 && break
-            done
-            [ "$found" -eq 0 ] && available+=("$i")
-          done
-          nextExtend=$((maxNum + 1))
-          availIdx=0
-          slot=0
-          peek_next_available() {
-            if [ "$availIdx" -lt "${#available[@]}" ]; then
-              slot="${available[$availIdx]}"
-            else
-              slot="$nextExtend"
-            fi
-          }
-          take_next_available() {
-            peek_next_available
-            if [ "$availIdx" -lt "${#available[@]}" ]; then
-              availIdx=$((availIdx + 1))
-            else
-              nextExtend=$((nextExtend + 1))
-            fi
-          }
-          errors=""
-          suggestions=""
-          if [ -z "$CHANGED" ]; then
-            echo "No ADR files changed in this PR."
-            exit 0
-          fi
-          while IFS= read -r file; do
-            [ -z "$file" ] && continue
-            basename=$(basename "$file")
-            if ! [[ "$basename" =~ ^[0-9]{3}-[a-z0-9]+(-[a-z0-9]+)*\.md$ ]]; then
-              errors+="Format invalid: $basename (expected NNN-kebab-case-title.md)\n"
-              suffix="${basename#*-}"
-              take_next_available
-              suggestions+="- Rename \`$basename\` to \`$(printf '%03d' "$slot")-${suffix}\`\n"
-              continue
-            fi
-            number=$((10#${basename:0:3}))
-            suffix="${basename:4}"
-            if git cat-file -e "origin/${{ github.base_ref }}:$file" 2>/dev/null; then
-              continue
-            fi
-            peek_next_available
-            expected="$slot"
-            conflict=0
-            for ex in "${existing[@]}"; do
-              if [ "$number" -eq "$((10#$ex))" ]; then
-                errors+="Number conflict: $basename already exists on base branch\n"
-                conflict=1
-                break
-              fi
-            done
-            if [ "$conflict" -eq 1 ]; then
-              take_next_available
-              suggestions+="- Rename \`$basename\` to \`$(printf '%03d' "$slot")-${suffix}\`\n"
-              continue
-            fi
-            if [ "$number" -ne "$expected" ]; then
-              errors+="Gap detected: $basename uses $number but next available is $expected\n"
-              take_next_available
-              suggestions+="- Rename \`$basename\` to \`$(printf '%03d' "$slot")-${suffix}\`\n"
-              continue
-            fi
-            take_next_available > /dev/null
-          done <<< "$CHANGED"
-          if [ -n "$errors" ]; then
-            echo -e "$errors"
-            echo "error<<EOF" >> "$GITHUB_OUTPUT"
-            echo -e "$errors" >> "$GITHUB_OUTPUT"
-            echo "EOF" >> "$GITHUB_OUTPUT"
-            echo "suggestion<<EOF" >> "$GITHUB_OUTPUT"
-            echo -e "$suggestions" >> "$GITHUB_OUTPUT"
-            echo "EOF" >> "$GITHUB_OUTPUT"
-            exit 1
-          fi
-          echo "All ADR filenames valid."
+      - name: Suggest next ADR filename
+        id: suggest
+        run: bash scripts/suggest-next-adr.sh --ci-suggest "${{ github.base_ref }}"
       - name: Comment on PR with suggestion
-        if: failure()
+        if: success() && steps.suggest.outputs.suggestion != ''
         uses: actions/github-script@v7
         env:
-          ERROR_MSG: ${{ steps.validate.outputs.error }}
-          SUGGESTION: ${{ steps.validate.outputs.suggestion }}
+          SUGGESTION: ${{ steps.suggest.outputs.suggestion }}
         with:
           script: |
             const body = [
-              '## ADR numbering check failed',
+              '## ADR numbering suggestion',
               '',
-              process.env.ERROR_MSG,
+              '**Suggested filename:**',
+              process.env.SUGGESTION,
               '',
-              '**Suggested filename(s):**',
-              process.env.SUGGESTION
+              'Run locally from repo root:',
+              '```bash',
+              './scripts/suggest-next-adr.sh',
+              '```'
             ].join('\n');
             github.rest.issues.createComment({
               issue_number: context.issue.number,
