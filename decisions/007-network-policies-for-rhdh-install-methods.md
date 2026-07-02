@@ -45,6 +45,76 @@ Add tailored NetworkPolicies to all RHDH application workloads (both the operand
 - **Label-scoped policies**: Since RHDH is a layered product deployed into potentially shared namespaces, policies use `podSelector` with RHDH-specific labels rather than namespace-wide selectors, following the OCP best practice for layered products. Each NetworkPolicy is scoped to a specific component of a specific instance:
   - **Operator**: CR-specific policies select pods using `rhdh.redhat.com/app: backstage-rhdh-<cr-name>` (RHDH backend) or `rhdh.redhat.com/app: backstage-psql-<cr-name>` (PostgreSQL)
   - **Helm chart**: release-specific policies select pods using the combination of `app.kubernetes.io/instance: <release-name>` and `app.kubernetes.io/component: backstage` (RHDH backend) or `app.kubernetes.io/component: primary` (PostgreSQL)
+
+  **Examples**:
+
+  Default-deny for the RHDH backend (Helm):
+  ```yaml
+  apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: my-rhdh-helm-default-deny
+  spec:
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/instance: my-rhdh-helm
+        app.kubernetes.io/component: backstage
+    policyTypes:
+      - Ingress
+      - Egress
+  ```
+
+  Allow ingress from the OpenShift Router to the RHDH backend (Operator, OCP-specific):
+  ```yaml
+  apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: my-rhdh-op-allow-router-ingress
+  spec:
+    podSelector:
+      matchLabels:
+        rhdh.redhat.com/app: backstage-rhdh-my-rhdh-op
+    policyTypes:
+      - Ingress
+    ingress:
+      - from:
+          # OCP-specific: matches the namespace where the OpenShift Router runs.
+          # May also allow all hostNetwork traffic.
+          - namespaceSelector:
+              matchLabels:
+                policy-group.network.openshift.io/ingress: ""
+        ports:
+          - port: 7007
+            protocol: TCP
+  ```
+  > **Note**: This example uses the OCP-specific label `network.openshift.io/policy-group: ingress` to identify the ingress controller namespace. On non-OCP platforms (EKS, AKS, GKE), the `namespaceSelector` must be adapted to match the namespace where the platform's ingress controller runs, or use `namespaceSelector: {}` to allow ingress on port 7007 from any namespace.
+
+  Restrict PostgreSQL egress to DNS only (Operator):
+  ```yaml
+  apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: my-rhdh-op-psql-allow-dns
+  spec:
+    podSelector:
+      matchLabels:
+        rhdh.redhat.com/app: backstage-psql-my-rhdh-op
+    policyTypes:
+      - Egress
+    egress:
+      - ports:
+          # Standard Kubernetes DNS
+          - port: 53
+            protocol: UDP
+          - port: 53
+            protocol: TCP
+          # OCP DNS
+          - port: 5353
+            protocol: UDP
+          - port: 5353
+            protocol: TCP
+  ```
+
 - **Operator vs. OLM boundary**: The RHDH Operator manages NetworkPolicies for its operands (RHDH pods, PostgreSQL, etc.) directly. NetworkPolicies for the operator pod itself are out of scope here and will be handled via OLM once support is fully backported ([RHDHPLAN-351](https://redhat.atlassian.net/browse/RHDHPLAN-351))
 
 ## Alternatives considered
