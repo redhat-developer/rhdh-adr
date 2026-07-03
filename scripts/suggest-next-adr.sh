@@ -1,7 +1,43 @@
 #!/bin/bash
 
+# Scans decisions/ for the lowest missing ADR number (gap), otherwise max + 1.
+# Usage:
+#   bash scripts/suggest-next-adr.sh --number-only        → 006  (internal / CI)
+#   bash scripts/suggest-next-adr.sh --ci-suggest <ref>  → CI validation on PR
 
-# finds the ADR file that is being changed in the PR and suggests the next appropriate ADR name suggestion to populate the '/decisions' folder with.
+suggest_next_number() {
+  local existing=() num ex n maxNum=0 padded found=0 next=""
+
+  while IFS= read -r num; do
+    existing+=("$num")
+  done < <(
+    ls decisions/*.md 2>/dev/null \
+      | sed 's|.*/||; s/-.*//' \
+      | grep -E '^[0-9]{3}$' \
+      | sort -n
+  )
+
+  for ex in "${existing[@]}"; do
+    n=$((10#$ex))
+    [ "$n" -gt "$maxNum" ] && maxNum="$n"
+  done
+
+  for ((i=0; i<=maxNum; i++)); do
+    padded=$(printf '%03d' "$i")
+    found=0
+    for ex in "${existing[@]}"; do
+      [ "$padded" = "$ex" ] && found=1 && break
+    done
+    if [ "$found" -eq 0 ]; then
+      next="$padded"
+      break
+    fi
+  done
+
+  [ -z "$next" ] && next=$(printf '%03d' $((maxNum + 1)))
+  printf '%s' "$next"
+}
+
 if [ "${1:-}" = "--ci-suggest" ]; then
   base_ref="${2:?Usage: suggest-next-adr.sh --ci-suggest <base-ref>}"
   git fetch origin "${base_ref}"
@@ -17,11 +53,10 @@ if [ "${1:-}" = "--ci-suggest" ]; then
     suffix="${basename%.md}"
   fi
   suffix="${suffix%.md}"
-  next=$(bash "$0")
+  next=$(bash "$0" --number-only)
 
-  # Sending out the error message to 'adr-number-check.yaml' for GITHUB to output the error via GITHUB_OUTPUT
   current="${basename:0:3}"
-  if [[ "$basename" =~ ^[0-9]{3}- ]] && [ "$current" != "$next" ]; then 
+  if [[ "$basename" =~ ^[0-9]{3}- ]] && [ "$current" != "$next" ]; then
     errors="ADR number mismatch: $basename uses $current but next available is $next"
     suggestion="- Use \`decisions/${next}-${suffix}\`"
     echo "$errors"
@@ -29,7 +64,6 @@ if [ "${1:-}" = "--ci-suggest" ]; then
     echo "suggestion=$suggestion" >> "$GITHUB_OUTPUT"
     exit 1
   fi
-    
 
   suggestion="- Use \`decisions/${next}-${suffix}\`"
   echo "suggestion=$suggestion" >> "$GITHUB_OUTPUT"
@@ -37,33 +71,12 @@ if [ "${1:-}" = "--ci-suggest" ]; then
   exit 0
 fi
 
-# This script is used by the GitHub Workflow check and cursor skill to determine the next appropriate ADR name suggestion to populate the '/decisions' folder with.
-   
-   existing=()
-   while IFS= read -r num; do
-     existing+=("$num")
-   done < <(
-     ls decisions/*.md 2>/dev/null \
-       | sed 's|.*/||; s/-.*//' \
-       | grep -E '^[0-9]{3}$' \
-       | sort -n
-   )
-   maxNum=0
-   for ex in "${existing[@]}"; do
-     n=$((10#$ex))
-     [ "$n" -gt "$maxNum" ] && maxNum="$n"
-   done
-   next=""
-   for ((i=0; i<=maxNum; i++)); do
-     padded=$(printf '%03d' "$i")
-     found=0
-     for ex in "${existing[@]}"; do
-       [ "$padded" = "$ex" ] && found=1 && break
-     done
-     if [ "$found" -eq 0 ]; then
-       next="$padded"
-       break
-     fi
-   done
-   [ -z "$next" ] && next=$(printf '%03d' $((maxNum + 1)))
-   printf '%s\n' "$next"
+if [ "${1:-}" = "--number-only" ]; then
+  suggest_next_number
+  exit 0
+fi
+
+next=$(suggest_next_number)
+suffix="${1:-kebab-case-title.md}"
+suffix="${suffix%.md}"
+printf 'decisions/%s-%s.md\n' "$next" "$suffix"
