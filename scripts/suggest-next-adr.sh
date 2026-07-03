@@ -67,3 +67,10 @@ fi
    done
    [ -z "$next" ] && next=$(printf '%03d' $((maxNum + 1)))
    printf '%s\n' "$next"
+
+   #Output the ADR suggestion onto the terminal when ./scripts/suggest-next-adr.sh is run from the repo root
+
+   NUM=$(./scripts/suggest-next-adr.sh)
+   echo "decisions/${NUM}-short-title-of-decision.md"
+
+   
