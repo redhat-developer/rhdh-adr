@@ -28,7 +28,7 @@ Add tailored NetworkPolicies to all RHDH application workloads (both the operand
 - **Default deny with selective allow**: Apply a default-deny policy scoped to RHDH-labeled pods (not namespace-wide, since RHDH is a layered product that may share namespaces), then add specific allow rules for known traffic flows. This applies to all RHDH-managed pods, not just the RHDH backend. Each component (e.g., RHDH backend, PostgreSQL) gets its own policies appropriate to its role, ensuring defense-in-depth across all components
 - **Ingress policies**: Allow inbound traffic only from expected sources:
   - OpenShift Router / Ingress controller to the RHDH backend (for user access via Routes/Ingresses)
-  - Monitoring/metrics scrapers to the metrics endpoints
+  - Monitoring/metrics scrapers to the metrics endpoints (e.g., Prometheus scraping the OpenTelemetry metrics port 9464, restricted to the monitoring namespace)
   - Inter-pod communication between RHDH components (e.g., backend to PostgreSQL)
 - **Egress policies**: Egress rules vary by component. Components that do not need external access (e.g., PostgreSQL) are locked down to minimal egress (DNS only, plus in-namespace traffic from/to RHDH). The RHDH backend pod, however, needs to reach a wide range of external destinations (plugin registries, LLM endpoints, SCM providers, auth providers, etc.) whose IP addresses are not predictable. Since NetworkPolicies can only filter by CIDR, not by DNS name, the base egress policy for the RHDH backend pod will in practice need to allow outbound HTTPS (port 443) broadly. This is an acknowledged trade-off: the RHDH backend egress is closer to "deny everything except DNS + HTTPS" than a strict per-destination allowlist. The defense-in-depth value comes from per-component granularity (PostgreSQL stays locked down) and from blocking non-standard ports, rather than from restricting which HTTPS destinations the backend can reach. The base egress rules include:
   - DNS resolution (cluster DNS service) for all RHDH-managed pods
@@ -112,6 +112,30 @@ Add tailored NetworkPolicies to all RHDH application workloads (both the operand
           - port: 5353
             protocol: UDP
           - port: 5353
+            protocol: TCP
+  ```
+
+  Allow Prometheus metrics scraping on port 9464 from the monitoring namespace only (Helm):
+  ```yaml
+  apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: my-rhdh-helm-allow-metrics-ingress
+  spec:
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/instance: my-rhdh-helm
+        app.kubernetes.io/component: backstage
+    policyTypes:
+      - Ingress
+    ingress:
+      - from:
+          - namespaceSelector:
+              matchLabels:
+                # Adapt to match your monitoring namespace
+                kubernetes.io/metadata.name: openshift-monitoring
+        ports:
+          - port: 9464
             protocol: TCP
   ```
 
