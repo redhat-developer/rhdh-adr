@@ -51,7 +51,7 @@ suggest_next_number() {
 if [ "${1:-}" = "--ci-suggest" ]; then
   base_ref="${2:?Usage: suggest-next-adr.sh --ci-suggest <base-ref>}"
   git fetch origin "${base_ref}"
-  file=$(git diff --name-only --diff-filter=AM "origin/${base_ref}...HEAD" -- 'decisions/*.md' | head -1)
+  file=$(git diff --name-only --diff-filter=AM "origin/${base_ref}..HEAD" -- 'decisions/*.md' | head -1)
   if [ -z "$file" ]; then
     echo "No ADR files changed."
     exit 0
