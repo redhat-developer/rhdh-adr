@@ -2,8 +2,6 @@
 
 # Scans decisions/ for the lowest missing ADR number (gap), otherwise max + 1.
 # Usage:
-#   ./scripts/suggest-next-adr.sh                         → decisions/006-short-title-of-decision.md
-#   ./scripts/suggest-next-adr.sh my-decision-title       → decisions/006-my-decision-title.md
 #   bash scripts/suggest-next-adr.sh --number-only        → 006  (internal / CI)
 #   bash scripts/suggest-next-adr.sh --ci-suggest <ref>  → CI validation on PR
 
@@ -79,6 +77,6 @@ if [ "${1:-}" = "--number-only" ]; then
 fi
 
 next=$(suggest_next_number)
-suffix="${1:-short-title-of-decision}"
+suffix="${1:-kebab-case-title.md}"
 suffix="${suffix%.md}"
 printf 'decisions/%s-%s.md\n' "$next" "$suffix"
