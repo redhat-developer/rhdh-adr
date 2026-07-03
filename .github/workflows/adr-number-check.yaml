@@ -18,14 +18,17 @@ jobs:
         id: suggest
         run: bash scripts/suggest-next-adr.sh --ci-suggest "${{ github.base_ref }}"
       - name: Comment on PR with suggestion
-        if: success() && steps.suggest.outputs.suggestion != ''
+        if: failure() && steps.suggest.outputs.suggestion != ''
         uses: actions/github-script@v7
         env:
+          ERROR_MSG: ${{ steps.suggest.outputs.error }}
           SUGGESTION: ${{ steps.suggest.outputs.suggestion }}
         with:
           script: |
             const body = [
-              '## ADR numbering suggestion',
+              '## ADR numbering check failed',
+              '',
+              process.env.ERROR_MSG,
               '',
               '**Suggested filename:**',
               process.env.SUGGESTION,

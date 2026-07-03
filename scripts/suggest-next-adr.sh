@@ -18,12 +18,21 @@ if [ "${1:-}" = "--ci-suggest" ]; then
   fi
   suffix="${suffix%.md}"
   next=$(bash "$0")
+
+  # Sending out the error message to 'adr-number-check.yaml' for GITHUB to output the error via GITHUB_OUTPUT
+  current="${basename:0:3}"
+  if [[ "$basename" =~ ^[0-9]{3}- ]] && [ "$current" != "$next" ]; then 
+    errors="ADR number mismatch: $basename uses $current but next available is $next"
+    suggestion="- Use \`decisions/${next}-${suffix}\`"
+    echo "$errors"
+    echo "error=$errors" >> "$GITHUB_OUTPUT"
+    echo "suggestion=$suggestion" >> "$GITHUB_OUTPUT"
+    exit 1
+  fi
+    
+
   suggestion="- Use \`decisions/${next}-${suffix}\`"
-  {
-    echo "suggestion<<EOF"
-    echo "$suggestion"
-    echo "EOF"
-  } >> "${GITHUB_OUTPUT}"
+  echo "suggestion=$suggestion" >> "$GITHUB_OUTPUT"
   echo "Suggested: decisions/${next}-${suffix}"
   exit 0
 fi
