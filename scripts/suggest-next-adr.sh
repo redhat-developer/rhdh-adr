@@ -5,6 +5,16 @@
 #   bash scripts/suggest-next-adr.sh --number-only        → 006  (internal / CI)
 #   bash scripts/suggest-next-adr.sh --ci-suggest <ref>  → CI validation on PR
 
+set_github_output() {
+  local name=$1 value=$2
+  [ -z "${GITHUB_OUTPUT:-}" ] && return
+  {
+    echo "${name}<<EOF"
+    echo "$value"
+    echo "EOF"
+  } >> "$GITHUB_OUTPUT"
+}
+
 suggest_next_number() {
   local existing=() num ex n maxNum=0 padded found=0 next=""
 
@@ -60,13 +70,13 @@ if [ "${1:-}" = "--ci-suggest" ]; then
     errors="ADR number mismatch: $basename uses $current but next available is $next"
     suggestion="- Use \`decisions/${next}-${suffix}\`"
     echo "$errors"
-    echo "error=$errors" >> "$GITHUB_OUTPUT"
-    echo "suggestion=$suggestion" >> "$GITHUB_OUTPUT"
+    set_github_output error "$errors"
+    set_github_output suggestion "$suggestion"
     exit 1
   fi
 
   suggestion="- Use \`decisions/${next}-${suffix}\`"
-  echo "suggestion=$suggestion" >> "$GITHUB_OUTPUT"
+  set_github_output suggestion "$suggestion"
   echo "Suggested: decisions/${next}-${suffix}"
   exit 0
 fi
