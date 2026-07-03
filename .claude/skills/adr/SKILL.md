@@ -52,7 +52,7 @@ Generate a complete ADR draft from a decision.
 
 4. Read `ADR-GUIDE.md` for guidelines
 
-5. Run `./scripts/suggest-next-adr.sh` from the repo root to get the next ADR number.
+5. Run `./scripts/suggest-next-adr.sh` from the repo root to get the next ADR number for filename.
    Use the output for the filename: `decisions/NNN-kebab-case-title.md`
    (Logic matches `.github/workflows/adr-number-check.yaml`.)
 
