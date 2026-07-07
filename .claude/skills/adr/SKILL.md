@@ -45,17 +45,30 @@ Generate a complete ADR draft from a decision.
    - What problem does it solve?
    - Current state/limitations
    - Key requirements or constraints
+
 2. Optionally ask for project context if needed: "What's your project repository URL and what does it do?"
+
 3. Read `ADR-TEMPLATE.md` for structure
+
 4. Read `ADR-GUIDE.md` for guidelines
-5. Generate complete ADR including:
+
+5. Pull the latest `main` and re-run the script `./scripts/suggest-next-adr.sh` if needed.
+
+6. Run `./scripts/suggest-next-adr.sh` from the repo root to get the next ADR number for filename.
+   Use the output for the filename: `decisions/NNN-kebab-case-title.md`
+   (Logic matches `.github/workflows/adr-number-check.yaml`.)
+   - The script only sees ADR files on your **current branch** (usually `main` plus your changes) — not numbers proposed in other open PRs.
+   - Before finalising the filename, check **open PRs** on the repo for new `decisions/NNN-*.md` files (better chance of avoiding conflicts; not guaranteed).
+   - **CI validates on PR**; the number is not final until the ADR PR is merged.
+
+7. Generate complete ADR including:
    - **Title**: Short, descriptive (5-10 words)
    - **Context**: Problem statement, who's affected, constraints
    - **Decision**: Clear statement + implementation approach
    - **Alternatives Considered**: 3-4 realistic alternatives with rejection rationale
    - **Consequences**: Honest positive ✅, negative ❌, and neutral ⚖️ impacts
 
-**Output:** Complete ADR ready for review and PR
+**Output:** Complete ADR saved as `decisions/NNN-kebab-case-title.md`, ready for review and PR
 
 ---
 
