@@ -19,10 +19,12 @@ gitGraph
     commit id: "v1.10 stable (default)"
     branch release-1.10
     commit id: "v1.10.2" tag: "v1.10.2"
-    commit id: "v1.10.3" tag: "v1.10.3"
     checkout main
     branch dev
     commit id: "2.1 work"
+    checkout release-1.10
+    commit id: "v1.10.3" tag: "v1.10.3"
+    checkout dev
     commit id: "2.1 work"
     commit id: "Feature Freeze"
     branch release-2.1
@@ -73,9 +75,11 @@ gitGraph
     branch release-1.10
     commit id: "v1.10.0 (★ default)" tag: "v1.10.0"
     commit id: "v1.10.1" tag: "v1.10.1"
-    commit id: "v1.10.2" tag: "v1.10.2"
     checkout main
     commit id: "2.1 work"
+    checkout release-1.10
+    commit id: "v1.10.2" tag: "v1.10.2"
+    checkout main
     commit id: "2.1 work"
     commit id: "Feature Freeze"
     branch release-2.1
