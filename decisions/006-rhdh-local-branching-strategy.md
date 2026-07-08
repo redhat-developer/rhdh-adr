@@ -15,7 +15,7 @@ The current release process creates `release-x.y` branches at Feature Freeze, th
 Introduce a long-lived `dev` branch in `rhdh-local` as the development branch for the upcoming RHDH release. `main` remains the default branch and continues to track the latest stable GA release.
 
 ```mermaid
-gitgraph
+gitGraph
     commit id: "v1.10 stable (default)"
     branch dev
     commit id: "2.1 work"
@@ -53,7 +53,7 @@ gitgraph
 - **Approach**: Make the `release-x.y` branch the GitHub default branch every time a new RHDH version reaches GA. `main` would effectively become the development branch
 
 ```mermaid
-gitgraph
+gitGraph
     commit id: "v1.10 (default)"
     commit id: "2.1 work"
     commit id: "2.1 work"
@@ -72,7 +72,7 @@ gitgraph
 - **Approach**: Create `release-2.1` now and direct all 2.1 work to target that branch instead of `main`. The release branch would serve double duty as both the development and release branch
 
 ```mermaid
-gitgraph
+gitGraph
     commit id: "v1.10 stable (default)"
     branch release-2.1
     commit id: "2.1 work (pre-FF)"
@@ -92,7 +92,7 @@ gitgraph
 
 ```mermaid
 %%{init: { 'gitGraph': {'mainBranchName': 'latest'}} }%%
-gitgraph
+gitGraph
     commit id: "v1.10 stable (default)"
     branch next
     commit id: "2.1 work"
