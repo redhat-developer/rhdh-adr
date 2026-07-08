@@ -17,6 +17,7 @@ Introduce a long-lived `dev` branch in `rhdh-local` as the development branch fo
 ```mermaid
 %%{init: { 'gitGraph': {'mainBranchName': 'main (default)'}} }%%
 gitGraph
+    commit id: "v1.10 stable"
     branch release-1.10
     commit id: "v1.10.2" tag: "v1.10.2"
     checkout "main (default)"
@@ -104,6 +105,7 @@ gitGraph
 ```mermaid
 %%{init: { 'gitGraph': {'mainBranchName': 'main (default)'}} }%%
 gitGraph
+    commit id: "v1.10 stable"
     branch release-2.1
     commit id: "2.1 work (pre-FF)"
     commit id: "2.1 work"
