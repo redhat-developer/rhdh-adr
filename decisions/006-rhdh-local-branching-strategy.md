@@ -15,11 +15,11 @@ The current release process creates `release-x.y` branches at Feature Freeze, th
 Introduce a long-lived `dev` branch in `rhdh-local` as the development branch for the upcoming RHDH release. `main` remains the default branch and continues to track the latest stable GA release of RHDH.
 
 ```mermaid
+%%{init: { 'gitGraph': {'mainBranchName': 'main (default)'}} }%%
 gitGraph
-    commit id: "v1.10 stable (default)"
     branch release-1.10
     commit id: "v1.10.2" tag: "v1.10.2"
-    checkout main
+    checkout "main (default)"
     branch dev
     commit id: "2.1 work"
     checkout release-1.10
@@ -30,11 +30,11 @@ gitGraph
     branch release-2.1
     commit id: "stabilization"
     commit id: "v2.1.0" tag: "v2.1.0"
-    checkout main
+    checkout "main (default)"
     merge release-2.1 id: "main ← 2.1 GA"
     checkout release-2.1
     commit id: "v2.1.1" tag: "v2.1.1"
-    checkout main
+    checkout "main (default)"
     merge release-2.1 id: "main ← v2.1.1"
     checkout dev
     commit id: "2.2 work"
@@ -43,7 +43,7 @@ gitGraph
     branch release-2.2
     commit id: "stabilization "
     commit id: "v2.2.0" tag: "v2.2.0"
-    checkout main
+    checkout "main (default)"
     merge release-2.2 id: "main ← 2.2 GA"
     checkout dev
     commit id: "2.3 work"
@@ -102,26 +102,26 @@ gitGraph
 - **Approach**: Create `release-2.1` now and direct all 2.1 work to target that branch instead of `main`. The release branch would serve double duty as both the development and release branch
 
 ```mermaid
+%%{init: { 'gitGraph': {'mainBranchName': 'main (default)'}} }%%
 gitGraph
-    commit id: "v1.10 stable (default)"
     branch release-2.1
     commit id: "2.1 work (pre-FF)"
     commit id: "2.1 work"
     commit id: "Feature Freeze"
     commit id: "stabilization"
     commit id: "v2.1.0" tag: "v2.1.0"
-    checkout main
+    checkout "main (default)"
     merge release-2.1 id: "main ← 2.1 GA"
     checkout release-2.1
     commit id: "v2.1.1" tag: "v2.1.1"
-    checkout main
+    checkout "main (default)"
     branch release-2.2
     commit id: "2.2 work (pre-FF)"
     commit id: "2.2 work"
     commit id: "Feature Freeze "
     commit id: "stabilization "
     commit id: "v2.2.0" tag: "v2.2.0"
-    checkout main
+    checkout "main (default)"
     merge release-2.2 id: "main ← 2.2 GA"
 ```
 
