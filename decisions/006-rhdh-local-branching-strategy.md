@@ -2,17 +2,17 @@
 
 ## Context
 
-**Problem**: Development work for upcoming RHDH releases cannot land in the [rhdh-local](https://github.com/redhat-developer/rhdh-local) repository because the default branch (`main`) must remain stable and compatible with the current GA release.
+**Problem**: Development work for upcoming RHDH releases cannot land in the [rhdh-local](https://github.com/redhat-developer/rhdh-local) repository because the default branch (`main`) must remain stable and compatible with the current GA release of RHDH.
 
-`rhdh-local` is a flagship tool for testing RHDH locally using Podman or Docker without any dependency on a Kubernetes or OpenShift cluster. PMs require that `main` always provides a "clone and run" experience: users run `git clone` followed by `podman compose up` (or `docker compose up`) and immediately get a working RHDH instance against the latest stable GA release (currently 1.10).
+RHDH Local is a flagship tool for testing RHDH locally using Podman or Docker without any dependency on a Kubernetes or OpenShift cluster. PMs [require](https://redhat-internal.slack.com/archives/C07EVRDD7KN/p1781509617319969?thread_ts=1781266325.167119&cid=C07EVRDD7KN) that `main` always provides a "clone and run" experience: users run `git clone` followed by `podman compose up` (or `docker compose up`) and immediately get a working RHDH instance against the latest stable GA release (currently 1.10). And existing users who already cloned `main` just `pull` the latest changes in order to upgrade.
 
-The problem surfaces whenever contributors need to merge work targeting an upcoming release. For example, [PR #256](https://github.com/redhat-developer/rhdh-local/pull/256) switched dynamic plugin toggling from a `disabled` field to a new `enabled` field; a 2.1 feature. The PR cannot be merged because `main` is pinned to RHDH 1.10. This is not a one-time issue: even minor releases have caused friction (e.g., adding a new `CATALOG_INDEX_IMAGE` env var to `default.env` for 1.9 while `main` was still on 1.8 was considered confusing).
+The problem surfaces whenever contributors need to merge work targeting an upcoming release. For example, [PR #256](https://github.com/redhat-developer/rhdh-local/pull/256) is a 2.1 feature switching dynamic plugin toggling from a `disabled` field to a new `enabled` field. The PR cannot be merged because `main` is pinned to RHDH 1.10. This is not a one-time issue: even minor releases have caused friction in the past (e.g., adding a new harmless `CATALOG_INDEX_IMAGE` env var to `default.env` for 1.9 while `main` was still on 1.8 was considered confusing).
 
 The current release process creates `release-x.y` branches at Feature Freeze, then tags those branches at GA and for each patch release (`x.y.z`). However, there is no landing zone for pre-Feature-Freeze development work targeting the next release. PRs sit open, accumulate conflicts, and slow down the team.
 
 ## Decision
 
-Introduce a long-lived `dev` branch in `rhdh-local` as the development branch for the upcoming RHDH release. `main` remains the default branch and continues to track the latest stable GA release.
+Introduce a long-lived `dev` branch in `rhdh-local` as the development branch for the upcoming RHDH release. `main` remains the default branch and continues to track the latest stable GA release of RHDH.
 
 ```mermaid
 gitGraph
