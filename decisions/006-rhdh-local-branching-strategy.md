@@ -96,7 +96,7 @@ gitGraph
     commit id: "v2.2.0 (★ default)" tag: "v2.2.0"
 ```
 
-- **Rejected because**: Changing the GitHub default branch alone does not affect existing clones; they still track `origin/main`. However, for this approach to unblock development, `main` would need to accept unstable next-release work, and existing users pulling `main` would start receiving unstable content. This contradicts the PM requirement that the branch users have cloned must remain stable
+- **Rejected because**: Changing the GitHub default branch at each GA means new clones would get the correct stable release branch, but existing users would need to manually switch to the new `release-x.y` branch after every GA. This defeats the purpose of a simple "pull to upgrade" workflow. Additionally, for this approach to unblock development, `main` would need to accept unstable next-release work, and existing users still tracking `origin/main` would start receiving unstable content; contradicting the PM requirement that the branch users have cloned must remain stable
 
 ### Alternative 2: Create `release-x.y` early (before Feature Freeze)
 
@@ -127,7 +127,7 @@ gitGraph
     merge release-2.2 id: "main ← 2.2 GA"
 ```
 
-- **Rejected because**: This conflates development and release stabilization concerns. The release branch is intended for stabilization between Feature Freeze and GA (e.g., RHDH test day fixes). Using it for active feature development dilutes its purpose and makes it harder to distinguish pre-FF development commits from post-FF stabilization fixes
+- **Rejected because**: The development target branch changes every release cycle (`release-2.1`, then `release-2.2`, etc.), requiring contributors to track which branch to target for the current release. A persistent `dev` branch provides a stable, well-known target that never changes
 
 ### Alternative 3: Rename branches to `latest`/`next` scheme
 
