@@ -70,21 +70,21 @@ gitGraph
 
 ```mermaid
 gitGraph
-    commit id: "v1.10 (default)"
+    commit id: "v1.10 (★ default)"
     commit id: "2.1 work"
     commit id: "2.1 work"
     commit id: "Feature Freeze"
     branch release-2.1
     commit id: "stabilization"
-    commit id: "v2.1.0" tag: "v2.1.0"
+    commit id: "v2.1.0 (★ default)" tag: "v2.1.0"
     commit id: "v2.1.1" tag: "v2.1.1"
     checkout main
-    commit id: "2.2 work (⚠ no longer default)"
+    commit id: "2.2 work"
     commit id: "2.2 work"
     commit id: "Feature Freeze "
     branch release-2.2
     commit id: "stabilization "
-    commit id: "v2.2.0" tag: "v2.2.0"
+    commit id: "v2.2.0 (★ default)" tag: "v2.2.0"
 ```
 
 - **Rejected because**: Changing the GitHub default branch alone does not affect existing clones; they still track `origin/main`. However, for this approach to unblock development, `main` would need to accept unstable next-release work, and existing users pulling `main` would start receiving unstable content. This contradicts the PM requirement that the branch users have cloned must remain stable
@@ -126,7 +126,7 @@ gitGraph
 ```mermaid
 %%{init: { 'gitGraph': {'mainBranchName': 'latest'}} }%%
 gitGraph
-    commit id: "v1.10 stable (default)"
+    commit id: "v1.10 (★ default)"
     branch next
     commit id: "2.1 work"
     commit id: "2.1 work"
@@ -135,7 +135,7 @@ gitGraph
     commit id: "stabilization"
     commit id: "v2.1.0" tag: "v2.1.0"
     checkout latest
-    merge release-2.1 id: "latest ← 2.1 GA"
+    merge release-2.1 id: "★ default (2.1 GA)"
     checkout release-2.1
     commit id: "v2.1.1" tag: "v2.1.1"
     checkout next
@@ -146,7 +146,7 @@ gitGraph
     commit id: "stabilization "
     commit id: "v2.2.0" tag: "v2.2.0"
     checkout latest
-    merge release-2.2 id: "latest ← 2.2 GA"
+    merge release-2.2 id: "★ default (2.2 GA)"
     checkout next
     commit id: "2.3 work"
 ```
