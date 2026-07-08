@@ -134,9 +134,9 @@ gitGraph
 - **Approach**: Create a rolling `latest` branch as the default (always pointing to the latest stable GA), rename `main` to `next` (tracking the unstable upcoming release). At each GA, `latest` advances to the new stable version, and `next` resets to the following unreleased version. Older supported streams would have `release-x.y` branches
 
 ```mermaid
-%%{init: { 'gitGraph': {'mainBranchName': 'latest'}} }%%
+%%{init: { 'gitGraph': {'mainBranchName': 'latest (default)'}} }%%
 gitGraph
-    commit id: "v1.10 (★ default)"
+    commit id: "v1.10 stable"
     branch next
     commit id: "2.1 work"
     commit id: "2.1 work"
@@ -144,8 +144,8 @@ gitGraph
     branch release-2.1
     commit id: "stabilization"
     commit id: "v2.1.0" tag: "v2.1.0"
-    checkout latest
-    merge release-2.1 id: "★ default (2.1 GA)"
+    checkout "latest (default)"
+    merge release-2.1 id: "latest ← 2.1 GA"
     checkout release-2.1
     commit id: "v2.1.1" tag: "v2.1.1"
     checkout next
@@ -155,8 +155,8 @@ gitGraph
     branch release-2.2
     commit id: "stabilization "
     commit id: "v2.2.0" tag: "v2.2.0"
-    checkout latest
-    merge release-2.2 id: "★ default (2.2 GA)"
+    checkout "latest (default)"
+    merge release-2.2 id: "latest ← 2.2 GA"
     checkout next
     commit id: "2.3 work"
 ```
