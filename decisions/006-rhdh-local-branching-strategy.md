@@ -62,7 +62,7 @@ gitGraph
 - RHDH-specific or configuration changes remain on `dev` until the corresponding RHDH version is GA and the `release-x.y` branch is merged into `main`
 - Fixes to `release-x.y` branches should be cherry-picked to both `main` and `dev`
 
-## Alternatives Considered
+## Alternatives considered
 
 ### Alternative 1: Rotate default branch to `release-x.y` at each GA
 
@@ -70,11 +70,10 @@ gitGraph
 
 ```mermaid
 gitGraph
-    commit id: "v1.10"
     branch release-1.10
+    commit id: "v1.10.0 (★ default)" tag: "v1.10.0"
     commit id: "v1.10.1" tag: "v1.10.1"
     commit id: "v1.10.2" tag: "v1.10.2"
-    commit id: "★ default"
     checkout main
     commit id: "2.1 work"
     commit id: "2.1 work"
