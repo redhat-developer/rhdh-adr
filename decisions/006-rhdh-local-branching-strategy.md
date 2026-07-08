@@ -19,6 +19,7 @@ gitGraph
     commit id: "v1.10 stable (default)"
     branch release-1.10
     commit id: "v1.10.2" tag: "v1.10.2"
+    commit id: "v1.10.3" tag: "v1.10.3"
     checkout main
     branch dev
     commit id: "2.1 work"
@@ -75,7 +76,7 @@ gitGraph
     commit id: "Feature Freeze"
     branch release-2.1
     commit id: "stabilization"
-    commit id: "v2.1.0 (new default)" tag: "v2.1.0"
+    commit id: "v2.1.0" tag: "v2.1.0"
     commit id: "v2.1.1" tag: "v2.1.1"
     checkout main
     commit id: "2.2 work (⚠ no longer default)"
@@ -83,7 +84,7 @@ gitGraph
     commit id: "Feature Freeze "
     branch release-2.2
     commit id: "stabilization "
-    commit id: "v2.2.0 (new default)" tag: "v2.2.0"
+    commit id: "v2.2.0" tag: "v2.2.0"
 ```
 
 - **Rejected because**: Changing the GitHub default branch alone does not affect existing clones; they still track `origin/main`. However, for this approach to unblock development, `main` would need to accept unstable next-release work, and existing users pulling `main` would start receiving unstable content. This contradicts the PM requirement that the branch users have cloned must remain stable
