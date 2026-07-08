@@ -65,7 +65,7 @@ gitGraph
     commit id: "2.2 work (⚠ no longer default)"
 ```
 
-- **Rejected because**: This breaks existing users who have already cloned the repo tracking `main`. Their `git pull` would stop receiving stable updates, since `main` would now contain unstable next-release work. This contradicts the PM requirement that the default branch must provide a stable "clone and run" experience
+- **Rejected because**: Changing the GitHub default branch alone does not affect existing clones; they still track `origin/main`. However, for this approach to unblock development, `main` would need to accept unstable next-release work, and existing users pulling `main` would start receiving unstable content. This contradicts the PM requirement that the branch users have cloned must remain stable
 
 ### Alternative 2: Create `release-x.y` early (before Feature Freeze)
 
