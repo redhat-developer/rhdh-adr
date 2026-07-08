@@ -17,6 +17,9 @@ Introduce a long-lived `dev` branch in `rhdh-local` as the development branch fo
 ```mermaid
 gitGraph
     commit id: "v1.10 stable (default)"
+    branch release-1.10
+    commit id: "v1.10.2" tag: "v1.10.2"
+    checkout main
     branch dev
     commit id: "2.1 work"
     commit id: "2.1 work"
@@ -26,9 +29,21 @@ gitGraph
     commit id: "v2.1.0" tag: "v2.1.0"
     checkout main
     merge release-2.1 id: "main ← 2.1 GA"
+    checkout release-2.1
+    commit id: "v2.1.1" tag: "v2.1.1"
+    checkout main
+    merge release-2.1 id: "main ← v2.1.1"
     checkout dev
     commit id: "2.2 work"
     commit id: "2.2 work"
+    commit id: "Feature Freeze "
+    branch release-2.2
+    commit id: "stabilization "
+    commit id: "v2.2.0" tag: "v2.2.0"
+    checkout main
+    merge release-2.2 id: "main ← 2.2 GA"
+    checkout dev
+    commit id: "2.3 work"
 ```
 
 **Implementation approach**:
@@ -61,8 +76,14 @@ gitGraph
     branch release-2.1
     commit id: "stabilization"
     commit id: "v2.1.0 (new default)" tag: "v2.1.0"
+    commit id: "v2.1.1" tag: "v2.1.1"
     checkout main
     commit id: "2.2 work (⚠ no longer default)"
+    commit id: "2.2 work"
+    commit id: "Feature Freeze "
+    branch release-2.2
+    commit id: "stabilization "
+    commit id: "v2.2.0 (new default)" tag: "v2.2.0"
 ```
 
 - **Rejected because**: Changing the GitHub default branch alone does not affect existing clones; they still track `origin/main`. However, for this approach to unblock development, `main` would need to accept unstable next-release work, and existing users pulling `main` would start receiving unstable content. This contradicts the PM requirement that the branch users have cloned must remain stable
@@ -82,6 +103,17 @@ gitGraph
     commit id: "v2.1.0" tag: "v2.1.0"
     checkout main
     merge release-2.1 id: "main ← 2.1 GA"
+    checkout release-2.1
+    commit id: "v2.1.1" tag: "v2.1.1"
+    checkout main
+    branch release-2.2
+    commit id: "2.2 work (pre-FF)"
+    commit id: "2.2 work"
+    commit id: "Feature Freeze "
+    commit id: "stabilization "
+    commit id: "v2.2.0" tag: "v2.2.0"
+    checkout main
+    merge release-2.2 id: "main ← 2.2 GA"
 ```
 
 - **Rejected because**: This conflates development and release stabilization concerns. The release branch is intended for stabilization between Feature Freeze and GA (e.g., RHDH test day fixes). Using it for active feature development dilutes its purpose. Additionally, the RHDH productization team's scripts and processes assume release branches are created at Feature Freeze, requiring coordination to change this timing across all repositories
@@ -103,8 +135,19 @@ gitGraph
     commit id: "v2.1.0" tag: "v2.1.0"
     checkout latest
     merge release-2.1 id: "latest ← 2.1 GA"
+    checkout release-2.1
+    commit id: "v2.1.1" tag: "v2.1.1"
     checkout next
     commit id: "2.2 work"
+    commit id: "2.2 work"
+    commit id: "Feature Freeze "
+    branch release-2.2
+    commit id: "stabilization "
+    commit id: "v2.2.0" tag: "v2.2.0"
+    checkout latest
+    merge release-2.2 id: "latest ← 2.2 GA"
+    checkout next
+    commit id: "2.3 work"
 ```
 
 - **Rejected because**: Renaming `main` breaks existing clones just like Alternative 1. The added naming complexity (three branch naming conventions: `latest`, `next`, `release-x.y`) increases cognitive load for contributors without proportional benefit. The scheme also introduces complexity around when to create `release-x.y` branches for older streams; e.g., `release-2.1` would only be created at 2.2 GA time, creating a gap in the maintenance model
