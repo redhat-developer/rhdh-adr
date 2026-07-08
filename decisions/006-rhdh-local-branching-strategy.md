@@ -1,4 +1,4 @@
-# ADR: Branching Strategy for rhdh-local Development
+# ADR: Branching strategy for `rhdh-local` development
 
 ## Context
 
