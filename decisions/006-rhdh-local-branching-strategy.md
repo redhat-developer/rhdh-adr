@@ -70,7 +70,12 @@ gitGraph
 
 ```mermaid
 gitGraph
-    commit id: "v1.10 (★ default)"
+    commit id: "v1.10"
+    branch release-1.10
+    commit id: "v1.10.1" tag: "v1.10.1"
+    commit id: "v1.10.2" tag: "v1.10.2"
+    commit id: "★ default"
+    checkout main
     commit id: "2.1 work"
     commit id: "2.1 work"
     commit id: "Feature Freeze"
@@ -117,7 +122,7 @@ gitGraph
     merge release-2.2 id: "main ← 2.2 GA"
 ```
 
-- **Rejected because**: This conflates development and release stabilization concerns. The release branch is intended for stabilization between Feature Freeze and GA (e.g., RHDH test day fixes). Using it for active feature development dilutes its purpose. Additionally, the RHDH productization team's scripts and processes assume release branches are created at Feature Freeze, requiring coordination to change this timing across all repositories
+- **Rejected because**: This conflates development and release stabilization concerns. The release branch is intended for stabilization between Feature Freeze and GA (e.g., RHDH test day fixes). Using it for active feature development dilutes its purpose and makes it harder to distinguish pre-FF development commits from post-FF stabilization fixes
 
 ### Alternative 3: Rename branches to `latest`/`next` scheme
 
@@ -159,17 +164,16 @@ gitGraph
 - ✅ Existing users are unaffected; `main` remains the stable default branch with no disruption to "clone and run" workflows
 - ✅ Immediate unblocking of next-release development; PRs like #256 can be merged into `dev` and validated against the correct RHDH version
 - ✅ Clean separation between stable content (`main`), active development (`dev`), and release stabilization (`release-x.y`)
+- ✅ The `dev` branch serves as an integration point where next-release features can be tested together before Feature Freeze, rather than sitting in isolated open PRs
 - ✅ Minimal conceptual overhead; the `main`/`dev` pattern is widely understood across the industry
 
 ### Negative
 - ❌ Contributors must learn to target `dev` instead of `main` for next-release work; risk of PRs accidentally targeting the wrong branch until the team adjusts
 - ❌ Two long-lived branches (`main` + `dev`) require periodic synchronization, adding maintenance overhead
-- ❌ The RHDH productization team must update Feature Freeze scripts to branch `release-x.y` from `dev` rather than `main`, and verify tag creation scripts still work correctly from release branches
-- ❌ Merging `release-x.y` into `main` at GA may produce non-trivial conflicts if `main` has received version-independent PRs or cherry-picks that diverged from the release branch
-- ❌ Between releases, `dev` can diverge significantly from `main`, making cherry-picks in either direction progressively harder over the course of a release cycle
+- ❌ The RHDH productization team must update Feature Freeze scripts to branch `release-x.y` from `dev` rather than `main`
+- ❌ `dev` and `main` can diverge over a release cycle, making cherry-picks in either direction progressively harder and potentially causing non-trivial merge conflicts when `release-x.y` is merged into `main` at GA
 
 ### Neutral
 - ⚖️ Branch protection rules need to be configured for both `main` and `dev`
-- ⚖️ The `dev` → `main` promotion at GA is a manual coordination step that becomes part of the release checklist
-- ⚖️ This decision is scoped to `rhdh-local`; other RHDH repositories may or may not adopt the same pattern depending on whether they face the same stability constraint
+- ⚖️ This decision is scoped to `rhdh-local`
 
