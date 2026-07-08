@@ -161,7 +161,7 @@ gitGraph
     commit id: "2.3 work"
 ```
 
-- **Rejected because**: Renaming `main` breaks existing clones just like Alternative 1. The added naming complexity (three branch naming conventions: `latest`, `next`, `release-x.y`) increases cognitive load for contributors without proportional benefit. The scheme also introduces complexity around when to create `release-x.y` branches for older streams; e.g., `release-2.1` would only be created at 2.2 GA time, creating a gap in the maintenance model
+- **Rejected because**: Renaming `main` breaks existing clones; `origin/main` would no longer exist, and users would need to discover and switch to `origin/latest` to restore their workflow. The added naming complexity (three branch naming conventions: `latest`, `next`, `release-x.y`) increases cognitive load for contributors without proportional benefit. The scheme also introduces complexity around when to create `release-x.y` branches for older streams; e.g., `release-2.1` would only be created at 2.2 GA time, creating a gap in the maintenance model
 
 ## Consequences
 
