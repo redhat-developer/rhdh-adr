@@ -33,6 +33,7 @@ Both configure via **app-config**. Schemas are fetched from respective plugin so
 - Schemas defined in upstream plugin source repos, not in RHDH
 - TypeScript schemas require conversion to JSON Schema
 - Not all plugins have schemas — schema validation should be best-effort
+- Schema validation only for plugins in a catalog (schemas extracted at catalog build time)
 - Must not block deployment for plugins without schemas
 
 ## Decision
@@ -65,6 +66,7 @@ Generate JSON Schema files during plugin catalog creation for both core and dyna
 **Schema extraction during catalog build** (in `rhdh-plugin-export-overlays`):
 
 **For core plugins:**
+- Core plugin schemas are included only in the [Default Catalog](https://github.com/redhat-developer/rhdh-adr/blob/main/decisions/002-devhub-plugin-catalog-crd.md) only
 - Fetch `packages/backend/package.json` and `packages/app/package.json` from RHDH repo
 - Extract plugin dependencies
 - For each plugin, resolve source repository and fetch `configSchema`
