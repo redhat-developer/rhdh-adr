@@ -16,15 +16,23 @@ set_github_output() {
 }
 
 suggest_next_number() {
+  local ref=${1:-}
   local existing=() num ex n maxNum=0 padded found=0 next=""
 
   while IFS= read -r num; do
     existing+=("$num")
   done < <(
-    ls decisions/*.md 2>/dev/null \
+    if [ -n "$ref" ]; then
+    git ls-tree --name-only "${ref}:decisions/" 2> /dev/null \
       | sed 's|.*/||; s/-.*//' \
       | grep -E '^[0-9]{3}$' \
       | sort -n
+    else
+      ls decisions/*.md 2>/dev/null \
+        | sed 's|.*/||; s/-.*//' \
+        | grep -E '^[0-9]{3}$' \
+        | sort -n
+    fi
   )
 
   for ex in "${existing[@]}"; do
@@ -63,7 +71,7 @@ if [ "${1:-}" = "--ci-suggest" ]; then
     suffix="${basename%.md}"
   fi
   suffix="${suffix%.md}"
-  next=$(bash "$0" --number-only)
+ next=$(bash "$0" --number-only --ref "origin/${base_ref}")
 
   current="${basename:0:3}"
   if [[ "$basename" =~ ^[0-9]{3}- ]] && [ "$current" != "$next" ]; then
@@ -82,7 +90,9 @@ if [ "${1:-}" = "--ci-suggest" ]; then
 fi
 
 if [ "${1:-}" = "--number-only" ]; then
-  suggest_next_number
+  ref=""
+  [ "${2:-}" = "--ref" ] && ref="${3:?missing ref}"
+  suggest_next_number "$ref"
   exit 0
 fi
 
