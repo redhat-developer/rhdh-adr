@@ -17,8 +17,6 @@ jobs:
         id: suggest
         continue-on-error: true
         run: bash scripts/suggest-next-adr.sh --ci-suggest "${{ github.base_ref }}"
-<<<<<<< HEAD
-      
       - name: Fail if ADR numbering check failed
         if: steps.suggest.outcome == 'failure'
         env:
@@ -27,40 +25,4 @@ jobs:
         run: |
           echo "$ERROR_MSG"
           echo "$SUGGESTION"
-=======
-      - name: Comment on PR with suggestion
-        if: steps.suggest.outcome == 'failure' && steps.suggest.outputs.suggestion != '' && 
-            github.event.pull_request.head.repo.full_name == github.repository &&
-            github.base_ref != 'RHIDP-15121-adr-number-check' ##This conditional will skip the comment step only within the fork environment
-        uses: actions/github-script@v7
-        env:
-          ERROR_MSG: ${{ steps.suggest.outputs.error }}
-          SUGGESTION: ${{ steps.suggest.outputs.suggestion }}
-        with:
-          script: |
-            const body = [
-              '## ADR numbering check failed',
-              '',
-              process.env.ERROR_MSG,
-              '',
-              '**Suggested filename:**',
-              process.env.SUGGESTION,
-              '',
-              'Run locally from repo root:',
-              '```bash',
-              './scripts/suggest-next-adr.sh',
-              '```'
-            ].join('\n');
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body
-            })
-      - name: Fail if ADR numbering check failed ##This step will out redirect the output of the echo commands to the GitHub Actions logs in the actions tab
-        if: steps.suggest.outcome == 'failure'
-        run: |
-          echo "${{ steps.suggest.outputs.error }}"
-          echo "${{ steps.suggest.outputs.suggestion }}"
->>>>>>> 29d9e30b98a4e68e74f6d3fb7d4c261656197fd3
           exit 1
