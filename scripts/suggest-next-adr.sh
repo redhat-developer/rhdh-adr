@@ -23,12 +23,12 @@ suggest_next_number() {
     existing+=("$num")
   done < <(
     if [ -n "$ref" ]; then
-    git ls-tree --name-only "${ref}:decisions/" 2> /dev/null \
-      | sed 's|.*/||; s/-.*//' \
+    git ls-tree --name-only "${ref}:decisions/" \
+      | sed 's/-.*//' \
       | grep -E '^[0-9]{3}$' \
       | sort -n
     else
-      ls decisions/*.md 2>/dev/null \
+      ls decisions/*.md \
         | sed 's|.*/||; s/-.*//' \
         | grep -E '^[0-9]{3}$' \
         | sort -n
@@ -71,7 +71,7 @@ if [ "${1:-}" = "--ci-suggest" ]; then
     suffix="${basename%.md}"
   fi
   suffix="${suffix%.md}"
- next=$(bash "$0" --number-only --ref "origin/${base_ref}")
+  next=$(bash "$0" --number-only --ref "origin/${base_ref}")
 
   current="${basename:0:3}"
   if [[ "$basename" =~ ^[0-9]{3}- ]] && [ "$current" != "$next" ]; then
