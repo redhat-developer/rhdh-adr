@@ -48,6 +48,8 @@ Add tailored NetworkPolicies to all RHDH application workloads (both the operand
 
   **Examples**:
 
+  > The following examples are illustrative. Both the Operator and the Helm chart will ship equivalent policies OOTB when a new RHDH instance is created. The examples alternate between Operator and Helm labels to show how both paths work.
+
   Default-deny for the RHDH backend (Helm):
   ```yaml
   apiVersion: networking.k8s.io/v1
@@ -181,7 +183,7 @@ Add tailored NetworkPolicies to all RHDH application workloads (both the operand
 ### Negative
 - ❌ While the base policies allow broad HTTPS egress (port 443), users must create their own additional NetworkPolicies for site-specific egress on non-standard ports or protocols. This requires awareness and documentation
 - ❌ Users on non-OCP platforms must ensure their CNI plugin supports NetworkPolicy enforcement. Otherwise, policies exist but provide no actual protection, which requires clear documentation to avoid a false sense of security
-- ❌ Adds complexity to the Operator and Helm chart codebases. Policies must be kept in sync with any changes to RHDH pod labels, ports, or component architecture, and must account for configurable features (Lightspeed sidecars enabled by default, Orchestrator cross-namespace flows, external databases)
+- ❌ Adds complexity to the Operator and Helm chart codebases. Policies must be kept in sync with any changes to RHDH pod labels, ports, or component architecture, and must account for configurable features (Lightspeed sidecars enabled by default, Orchestrator cross-namespace flows, external databases). Future changes to NetworkPolicies should remain aligned with the principles outlined in this ADR
 - ❌ Requires testing across all supported platforms (OCP, EKS, AKS, GKE) and across deployment variants (with/without Lightspeed, Orchestrator, external database) to validate that policies do not inadvertently block legitimate traffic
 - ❌ On clusters that enforce NetworkPolicies (e.g., OCP), upgrading to a version that ships these base policies will introduce a default-deny for RHDH pods. Existing deployments that rely on egress to endpoints not covered by the base policies (SCMs, auth providers, registries, etc.) will experience connectivity failures unless users create their own additive NetworkPolicies before or during the upgrade. This upgrade impact must be clearly communicated in release notes and migration guides, including ready-to-use NetworkPolicy templates for common egress scenarios and steps to verify connectivity after the upgrade
 
