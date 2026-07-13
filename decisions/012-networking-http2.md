@@ -12,7 +12,7 @@ HTTP/2 provides significant performance benefits through:
 **Platform differences:**
 
 **OpenShift** has significant constraints:
-1. **Cluster-admin requirement**: HTTP/2 must be enabled at the IngressController level:
+1. **Cluster-admin requirement**: HTTP/2 must be enabled at the IngressController level (each HAProxy instance) or cluster-wide (for all HAProxy instances):
    ```sh
    oc annotate ingresses.config/cluster ingress.operator.openshift.io/default-enable-http2=true
    ```
