@@ -21,10 +21,13 @@ gitGraph
     branch release-1.10
     commit id: "v1.10.2" tag: "v1.10.2"
     checkout "main (default)"
+    merge release-1.10 id: "main ← v1.10.2"
     branch dev
     commit id: "2.1 work"
     checkout release-1.10
     commit id: "v1.10.3" tag: "v1.10.3"
+    checkout "main (default)"
+    merge release-1.10 id: "main ← v1.10.3"
     checkout dev
     commit id: "2.1 work"
     commit id: "Feature Freeze"
