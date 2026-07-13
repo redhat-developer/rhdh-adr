@@ -1,0 +1,52 @@
+name: ADR Number Check
+on:
+  pull_request:
+    paths:
+      - 'decisions/**'
+      - 'scripts/suggest-next-adr.sh'
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  suggest-adr-number:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Suggest next ADR filename
+        id: suggest
+        continue-on-error: true
+        run: bash scripts/suggest-next-adr.sh --ci-suggest "${{ github.base_ref }}"
+      - name: Comment on PR with suggestion
+        if: steps.suggest.outcome == 'failure' && steps.suggest.outputs.suggestion != ''
+        uses: actions/github-script@v7
+        env:
+          ERROR_MSG: ${{ steps.suggest.outputs.error }}
+          SUGGESTION: ${{ steps.suggest.outputs.suggestion }}
+        with:
+          script: |
+            const body = [
+              '## ADR numbering check failed',
+              '',
+              process.env.ERROR_MSG,
+              '',
+              '**Suggested filename:**',
+              process.env.SUGGESTION,
+              '',
+              'Run locally from repo root:',
+              '```bash',
+              './scripts/suggest-next-adr.sh',
+              '```'
+            ].join('\n');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            })
+      - name: Fail if ADR numbering check failed
+        if: steps.suggest.outcome == 'failure'
+        run: |
+          echo "${{ steps.suggest.outputs.error }}"
+          exit 1
