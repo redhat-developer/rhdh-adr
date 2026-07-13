@@ -57,7 +57,6 @@ gitGraph
 - Create a `dev` branch off `main`. All PRs targeting the next RHDH release are merged into `dev`
 - `main` remains the default (and stable) branch; existing users who have cloned the repo are unaffected
 - `dev` is configured for the RHDH `next` tag (the development build for the upcoming release), while `main` remains configured for the current GA RHDH version
-- `dev` is always exactly one release ahead of `main`; work targeting releases beyond the immediate next one should not land on `dev`
 - At Feature Freeze, the RHDH productization team's release branch creation scripts create `release-x.y` from `dev` (not `main`). The tag creation scripts continue to tag from `release-x.y` at GA and for each patch release
 - At GA, the `release-x.y` branch corresponding to the latest stable RHDH release is merged into `main`. `dev` continues as usual; no rebase or reset is needed
 - Update the contribution guide to document that PRs should target `dev` for release-specific work, or `main` for version-independent changes (e.g., documentation fixes, GitHub Actions dependency updates)
@@ -68,7 +67,7 @@ gitGraph
 - RHDH-specific or configuration changes remain on `dev` until the corresponding RHDH version is GA and the `release-x.y` branch is merged into `main`
 - Bug fixes follow the same rules: version-independent fixes target `main`; RHDH-version-specific fixes target `dev` or the relevant `release-x.y` branch. Note that rhdh-local does not produce its own bug-fix releases; fixes land on the appropriate branch and are available immediately via `git pull`
 - Fixes to `release-x.y` branches should be cherry-picked to both `main` and `dev`
-- Older `release-x.y` branches are maintained as long as users need them for plugin development against that RHDH version
+- Older `release-x.y` branches are maintained for plugin development and testing as long as the corresponding RHDH version is supported
 
 ## Alternatives considered
 
@@ -166,7 +165,7 @@ gitGraph
     commit id: "2.3 work"
 ```
 
-- **Rejected because**: Renaming `main` breaks existing clones; `origin/main` would no longer exist, and users would need to discover and switch to `origin/latest` to restore their workflow. The added naming complexity (three branch naming conventions: `latest`, `next`, `release-x.y`) increases cognitive load for contributors without proportional benefit. The scheme also introduces complexity around when to create `release-x.y` branches for older streams; e.g., `release-2.1` would only be created at 2.2 GA time, creating a gap in the maintenance model
+- **Rejected because**: Renaming `main` breaks existing clones; `origin/main` would no longer exist, and users would need to discover and switch to `origin/latest` to restore their workflow. The added naming complexity (three branch naming conventions: `latest`, `next`, `release-x.y`) increases cognitive load for contributors without proportional benefit
 
 ## Consequences
 
