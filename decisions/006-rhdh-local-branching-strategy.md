@@ -4,7 +4,7 @@
 
 **Problem**: Development work for upcoming RHDH releases cannot land in the [rhdh-local](https://github.com/redhat-developer/rhdh-local) repository because the default branch (`main`) must remain stable and compatible with the current GA release of RHDH.
 
-RHDH Local is a flagship tool for testing RHDH locally using Podman or Docker without any dependency on a Kubernetes or OpenShift cluster. PMs [require](https://redhat-internal.slack.com/archives/C07EVRDD7KN/p1781509617319969?thread_ts=1781266325.167119&cid=C07EVRDD7KN) that `main` always provides a "clone and run" experience: users run `git clone` followed by `podman compose up` (or `docker compose up`) and immediately get a working RHDH instance against the latest stable GA release (currently 1.10). And existing users who already cloned `main` just `pull` the latest changes in order to upgrade.
+RHDH Local is a flagship tool for testing RHDH locally using Podman or Docker without any dependency on a Kubernetes or OpenShift cluster. Beyond testing, users also rely on rhdh-local for local plugin development before moving to production; they may stay on a specific `release-x.y` branch to develop plugins against that RHDH version. PMs [require](https://redhat-internal.slack.com/archives/C07EVRDD7KN/p1781509617319969?thread_ts=1781266325.167119&cid=C07EVRDD7KN) that `main` always provides a "clone and run" experience: users run `git clone` followed by `podman compose up` (or `docker compose up`) and immediately get a working RHDH instance against the latest stable GA release (currently 1.10). And existing users who already cloned `main` just `pull` the latest changes in order to upgrade.
 
 The problem surfaces whenever contributors need to merge work targeting an upcoming release. For example, [PR #256](https://github.com/redhat-developer/rhdh-local/pull/256) is a 2.1 feature switching dynamic plugin toggling from a `disabled` field to a new `enabled` field. The PR cannot be merged because `main` is pinned to RHDH 1.10. This is not a one-time issue: even minor releases have caused friction in the past (e.g., adding a new harmless `CATALOG_INDEX_IMAGE` env var to `default.env` for 1.9 while `main` was still on 1.8 was considered confusing).
 
@@ -63,7 +63,9 @@ gitGraph
 **Cherry-pick policy**:
 - Version-independent changes (documentation, GitHub Actions dependency updates) can target `main` directly or be cherry-picked between `dev` and `main`
 - RHDH-specific or configuration changes remain on `dev` until the corresponding RHDH version is GA and the `release-x.y` branch is merged into `main`
+- Bug fixes follow the same rules: version-independent fixes target `main`; RHDH-version-specific fixes target `dev` or the relevant `release-x.y` branch. Note that rhdh-local does not produce its own bug-fix releases; fixes land on the appropriate branch and are available immediately via `git pull`
 - Fixes to `release-x.y` branches should be cherry-picked to both `main` and `dev`
+- Older `release-x.y` branches are maintained as long as users need them for plugin development against that RHDH version
 
 ## Alternatives considered
 
