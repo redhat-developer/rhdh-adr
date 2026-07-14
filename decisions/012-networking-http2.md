@@ -9,65 +9,37 @@ HTTP/2 provides significant performance benefits through:
 - **Header compression**: Reduced overhead with HPACK
 - **No head-of-line blocking**: Independent streams at HTTP level
 
-**Platform differences:**
+**Platform constraints:**
 
-**OpenShift** has significant constraints:
-1. **Cluster-admin requirement**: HTTP/2 must be enabled at the IngressController level (each HAProxy instance) or cluster-wide (for all HAProxy instances):
-   ```sh
-   oc annotate ingresses.config/cluster ingress.operator.openshift.io/default-enable-http2=true
-   ```
-2. **Custom certificate requirement**: OpenShift blocks HTTP/2 for routes using the default wildcard certificate (`*.apps.cluster.com`) to prevent connection coalescing issues.
-3. **No per-route control**: There is no route-level annotation to enable HTTP/2; it's a cluster-wide decision.
+**OpenShift:**
+- HTTP/2 requires cluster-admin to enable at IngressController level (cluster-wide)
+- Custom certificate required (default wildcard certificate blocks HTTP/2 due to connection coalescing)
+- No per-route control
 
-This means RHDH users on shared OpenShift clusters cannot enable HTTP/2 without cluster-admin cooperation.
+**Vanilla Kubernetes:**
+- **Traefik**: HTTP/2 enabled by default with TLS
+- **Caddy**: HTTP/2 enabled by default with TLS
+- **NGINX Ingress Controller**: HTTP/2 disabled by default, requires cluster-admin to enable via ConfigMap (cluster-wide)
+- **HAProxy**: Depends on configuration
 
-**Vanilla Kubernetes** is simpler — most Ingress controllers (NGINX, Traefik, HAProxy) support HTTP/2 by default when TLS is enabled. No special configuration required.
+On both platforms, RHDH users on shared clusters cannot enable HTTP/2 without cluster-admin cooperation.
 
 ## Decision
 
 Introduce unified networking configuration for both OpenShift (Route) and vanilla Kubernetes (Ingress), with HTTP/2 proxy support:
 
-- **OpenShift**: Provide optional NGINX sidecar proxy that handles TLS termination and HTTP/2, allowing users to enable HTTP/2 without cluster-admin privileges
-- **Vanilla Kubernetes**: Add Ingress configuration; most controllers support HTTP/2 natively with TLS, sidecar optional
+- **OpenShift**: Provide optional sidecar proxy that handles TLS termination and HTTP/2, allowing users to enable HTTP/2 without cluster-admin privileges
+- **Vanilla Kubernetes**: Add Ingress configuration; sidecar provides HTTP/2 without cluster-admin dependency (similar benefit as OpenShift)
 
 **Implementation approach**:
 
-1. **Add optional NGINX sidecar container** to Backstage deployment:
-   ```yaml
-   containers:
-   - name: backstage
-     image: backstage:latest
-     ports:
-     - containerPort: 7007
+1. **Add optional HTTP/2 proxy sidecar container** to Backstage deployment:
+   - Lightweight reverse proxy (e.g., NGINX, Envoy, Caddy) configured for HTTP/2 and TLS termination
+   - Proxies requests to Backstage on localhost:7007
+   - Mounts TLS certificates from Secret
+   - Can add caching headers for static assets (e.g., `/api/scalprum/*/static/*.js`) — reduces repeat downloads on subsequent page loads — see [POC](https://github.com/karthikjeeyar/rhdh-http2)
 
-   - name: http2-proxy
-     image: nginx:alpine
-     ports:
-     - containerPort: 8443
-     volumeMounts:
-     - name: tls
-       mountPath: /etc/nginx/tls
-     - name: nginx-config
-       mountPath: /etc/nginx/conf.d
-   ```
-
-2. **NGINX configuration with HTTP/2**:
-   ```nginx
-   server {
-       listen 8443 ssl http2;
-       ssl_certificate /etc/nginx/tls/tls.crt;
-       ssl_certificate_key /etc/nginx/tls/tls.key;
-
-       location / {
-           proxy_pass http://localhost:7007;
-           proxy_http_version 1.1;
-           proxy_set_header Host $host;
-           proxy_set_header X-Forwarded-Proto $scheme;
-       }
-   }
-   ```
-
-3. **Use passthrough termination** (when http2Proxy enabled):
+2. **Use passthrough termination** (when `http2Proxy` enabled):
 
    **OpenShift Route:**
    ```yaml
@@ -80,14 +52,14 @@ Introduce unified networking configuration for both OpenShift (Route) and vanill
        targetPort: https
    ```
 
-   **Kubernetes Ingress** (if http2Proxy used): Configure Ingress controller for SSL passthrough, or use standard TLS termination since most controllers support HTTP/2 natively.
+   **Kubernetes Ingress** (if http2Proxy used): Configure Ingress controller for SSL passthrough to let the sidecar handle HTTP/2 termination.
 
-4. **Certificate provisioning options**:
+3. **Certificate provisioning options**:
    - OpenShift service serving certificates (annotation-based, auto-rotated, but causes browser warnings — internal CA)
    - cert-manager with Let's Encrypt (public CA, no browser warnings)
    - User-provided certificates via Secret
 
-5. **Expose via `spec.network`**:
+4. **Expose via `spec.network`**:
 
    **OpenShift (Route):**
    ```yaml
@@ -109,21 +81,21 @@ Introduce unified networking configuration for both OpenShift (Route) and vanill
        ingress:
          enabled: true
          host: my-backstage.example.com
-         className: nginx  # optional
+         className: <ingress-class>  # optional
          tls:
            secretName: my-tls
        http2Proxy:
-         enabled: false  # usually not needed — most Ingress controllers support HTTP/2 natively
+         enabled: true  # enables HTTP/2 without cluster-admin (NGINX Ingress also requires cluster-admin to enable HTTP/2)
    ```
 
    - `spec.network.route` — moved from `spec.application.route` (deprecated, supported with warning)
    - `spec.network.ingress` — new, for vanilla Kubernetes deployments
-   - `spec.network.http2Proxy.enabled` — adds NGINX sidecar; switches Route to passthrough / configures Ingress for SSL passthrough
+   - `spec.network.http2Proxy.enabled` — adds sidecar; switches Route to passthrough / configures Ingress for SSL passthrough
    - Certificate reuse: when `http2Proxy.enabled`, proxy uses `route.tls` or `ingress.tls` certificate; defaults to service serving certificates if not specified
 
-   **Note:** On vanilla Kubernetes, most Ingress controllers (NGINX, Traefik, HAProxy) support HTTP/2 by default when TLS is enabled. The `http2Proxy` sidecar is primarily needed for OpenShift where cluster-admin controls HTTP/2 at the IngressController level.
+   **Note:** The `http2Proxy` sidecar provides HTTP/2 support without cluster-admin cooperation on both OpenShift and Kubernetes (where NGINX Ingress Controller also requires cluster-admin to enable HTTP/2).
 
-6. **Default behavior considerations**:
+5. **Default behavior considerations**:
 
    Enabling `http2Proxy` by default is possible but has UX trade-offs:
    - **Without user-provided certificate**: Uses OpenShift service serving certificates (internal CA) — HTTP/2 works but browsers show certificate warning
@@ -145,33 +117,31 @@ Introduce unified networking configuration for both OpenShift (Route) and vanill
 - **Approach**: Deploy NGINX/Envoy as separate Deployment + Service; Route/Ingress points to proxy, proxy routes to Backstage Service
 - **Rejected because**: Single point of failure; extra network hop adds latency; doesn't scale automatically with Backstage replicas; more complex Service topology to manage
 
-### Alternative 3: Modify Backstage/Node.js to serve HTTP/2 directly
-- **Approach**: Configure Backstage's Node.js server to handle HTTP/2 and TLS
-- **Rejected because**: Requires upstream Backstage changes; Node.js HTTP/2 is more complex than NGINX; certificate handling in Node.js is less mature
-
 ## Consequences
 
 ### Positive
-✅ Users can enable HTTP/2 without cluster-admin privileges
+✅ Sidecar approach enables HTTP/2 without cluster-admin privileges (bypasses Ingress controller limitations)
 ✅ Faster frontend page loads (multiplexing, reduced connections)
 ✅ Works on any OpenShift/Kubernetes cluster
-✅ NGINX is battle-tested, lightweight (~10MB RAM), and well-understood
-✅ Optional feature - users who don't need HTTP/2 are unaffected
+✅ Lightweight proxy sidecars have minimal resource footprint
 ✅ Works correctly with multi-replica deployments (sidecar per pod)
 
 ### Negative
+❌ HTTP/2 not available by default — requires user to provide certificate to avoid browser warnings
 ❌ Additional container per pod (slight resource overhead)
-❌ Users must manage TLS certificates (unless using service serving certs)
+❌ Users must manage TLS certificates (unless accepting browser warnings with service serving certs)
 ❌ More complex deployment architecture to understand/debug
-❌ NGINX configuration must be maintained by operator
-
-### Neutral
-⚖️ Changes Route from `edge` to `passthrough` termination when enabled (Ingress: depends on controller)
-⚖️ HTTP/2 benefit depends on network conditions (may not help on lossy networks)
-⚖️ Browser DevTools needed to verify HTTP/2 is active (Protocol column)
+❌ Proxy configuration must be maintained by operator
 
 ## References
 
+**Related issues:**
+- [RHDHSUPP-320](https://redhat.atlassian.net/browse/RHDHSUPP-320)
+- [RHDHPLAN-1598](https://redhat.atlassian.net/browse/RHDHPLAN-1598)
+- [POC: rhdh-http2](https://github.com/karthikjeeyar/rhdh-http2)
+
+**Documentation:**
 - [Red Hat Blog: gRPC or HTTP/2 Ingress Connectivity in OpenShift](https://www.redhat.com/en/blog/grpc-or-http/2-ingress-connectivity-in-openshift)
-- [OpenShift Docs: Configuring Routes](https://docs.openshift.com/container-platform/4.14/networking/routes/route-configuration.html)
+- [OpenShift Docs: Configuring Routes](https://docs.redhat.com/en/documentation/openshift_container_platform/4.21/html/networking/configuring-routes)
+- [NGINX Ingress Controller: ConfigMap HTTP/2 Setting](https://docs.nginx.com/nginx-ingress-controller/configuration/global-configuration/configmap-resource/#listeners)
 - [HTTP/2 connection coalescing explanation](https://daniel.haxx.se/blog/2016/08/18/http2-connection-coalescing/)
