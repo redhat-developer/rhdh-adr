@@ -15,14 +15,4 @@ jobs:
           fetch-depth: 0
       - name: Suggest next ADR filename
         id: suggest
-        continue-on-error: true
         run: bash scripts/suggest-next-adr.sh --ci-suggest "${{ github.base_ref }}"
-      - name: Fail if ADR numbering check failed
-        if: steps.suggest.outcome == 'failure'
-        env:
-          ERROR_MSG: ${{ steps.suggest.outputs.error }}
-          SUGGESTION: ${{ steps.suggest.outputs.suggestion }}
-        run: |
-          echo "$ERROR_MSG"
-          echo "$SUGGESTION"
-          exit 1
