@@ -51,7 +51,7 @@ Add tailored NetworkPolicies to all RHDH application workloads (both the operand
 
   **Examples**:
 
-  > The following examples are illustrative. Both the Operator and the Helm chart will ship equivalent policies OOTB when a new RHDH instance is created. The examples alternate between Operator and Helm labels to show how both paths work.
+  > The following examples are illustrative. Both the Operator and the Helm chart will ship equivalent policies out of the box when a new RHDH instance is created. The examples alternate between Operator and Helm labels to show how both paths work.
 
   Default-deny for the RHDH backend (Helm):
   ```yaml
@@ -165,7 +165,7 @@ Add tailored NetworkPolicies to all RHDH application workloads (both the operand
 - **Rejected because**: Ingress-only policies address lateral movement but leave the outbound attack surface completely open. A compromised RHDH pod could still exfiltrate data or communicate with unauthorized destinations. [OCPSTRAT-819](https://redhat.atlassian.net/browse/OCPSTRAT-819) requires the default supported setup to be secure out of the box, covering both ingress and egress. The base egress policies cover the most common traffic flows (HTTPS on port 443). Any plugin configured with endpoints on non-standard ports or protocols would need flavour-conditional or user-managed additive policies.
 
 ### Alternative 5: Use AdminNetworkPolicy (ANP) / BaselineAdminNetworkPolicy (BANP), or ClusterNetworkPolicy (CNP) later, instead of standard NetworkPolicies
-- **Approach**: Ship ANP/BANP (or their planned successor CNP) resources with labels selecting all possible RHDH workloads, created once when the Operator is installed. Since OLM cannot install NetworkPolicies OOTB (due to the backport issues mentioned in [RHDHPLAN-351](https://redhat.atlassian.net/browse/RHDHPLAN-351)), the ANP/BANP resources would be provided as an external manifest that users apply after installing the Operator. This was considered as seems to be implied by the parent outcome [HPSTRAT-104](https://redhat.atlassian.net/browse/HPSTRAT-104).
+- **Approach**: Ship ANP/BANP (or their planned successor CNP) resources with labels selecting all possible RHDH workloads, created once when the Operator is installed. Since OLM cannot install NetworkPolicies out of the box (due to the backport issues mentioned in [RHDHPLAN-351](https://redhat.atlassian.net/browse/RHDHPLAN-351)), the ANP/BANP resources would be provided as an external manifest that users apply after installing the Operator. This was considered as seems to be implied by the parent outcome [HPSTRAT-104](https://redhat.atlassian.net/browse/HPSTRAT-104).
 - **Rejected because**:
   1. Requiring users to apply a separate manifest for ANP/BANP/CNP defeats the purpose of having workloads secure by default (a requirement from the threat model [OCPSTRAT-819](https://redhat.atlassian.net/browse/OCPSTRAT-819)). There is a risk that users will not apply it, leaving deployments unprotected. Users would also need to manually remove these resources when uninstalling the Operator
   2. ANP/BANP CRDs exist in OCP by default (GA since OCP 4.16, [OCPSTRAT-939](https://redhat.atlassian.net/browse/OCPSTRAT-939)), but are not available on other supported Kubernetes platforms (EKS, AKS, GKE) and would require different manifests to be applied
