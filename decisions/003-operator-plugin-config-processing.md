@@ -102,11 +102,11 @@ Operator Reconciliation:
 plugins:
   # Short identifier - resolved from catalogs
   - package: ref://backstage-plugin-techdocs
-    disabled: false
+    enabled: true
 
   # Full URL - used as-is (exact match)
   - package: oci://internal.registry/custom-plugin:1.0.0!custom-plugin
-    disabled: false
+    enabled: true
 ```
 
 Operator resolves `backstage-plugin-techdocs` to full URL from catalog, validates it exists, and generates merged config.
