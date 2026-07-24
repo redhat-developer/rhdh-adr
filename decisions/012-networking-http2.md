@@ -141,6 +141,7 @@ Introduce unified networking configuration for both OpenShift (Route) and vanill
 - [POC: rhdh-http2](https://github.com/karthikjeeyar/rhdh-http2)
 
 **Documentation:**
+- [FAQ: Does OpenShift Router support HTTP/2](https://docs.google.com/document/d/1S6E_sSmtxHknoVNBzW36q5Q-SHssbNFGWSWL3cwNEeo/edit?tab=t.0#heading=h.renxd4iwgobg)
 - [Red Hat Blog: gRPC or HTTP/2 Ingress Connectivity in OpenShift](https://www.redhat.com/en/blog/grpc-or-http/2-ingress-connectivity-in-openshift)
 - [OpenShift Docs: Configuring Routes](https://docs.redhat.com/en/documentation/openshift_container_platform/4.21/html/networking/configuring-routes)
 - [NGINX Ingress Controller: ConfigMap HTTP/2 Setting](https://docs.nginx.com/nginx-ingress-controller/configuration/global-configuration/configmap-resource/#listeners)
