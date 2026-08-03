@@ -143,7 +143,7 @@ Operator resolves `backstage-plugin-techdocs` to full URL from catalog, validate
 **Related ADRs:**
 - ADR-002 (DevHubPluginCatalog CRD) provides catalog infrastructure this builds on
 - ADR-001 (Flavour-Based Configuration) provides flavour configs used in merge order
-- ADR-004 (Plugin Infrastructure Support) uses merged config for deployment patches
+- ADR-011 (Plugin Infrastructure Support) uses merged config for deployment patches
 
 **Implementation details:**
 - Plugin name extraction from OCI URLs:

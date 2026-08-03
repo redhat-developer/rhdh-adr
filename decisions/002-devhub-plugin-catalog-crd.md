@@ -136,7 +136,7 @@ status:
 
 **Related ADRs:**
 - ADR-003 (Operator-Based Plugin Configuration Processing) builds on this foundation for config merging
-- ADR-004 (Plugin Infrastructure Support) uses catalog ConfigMaps for image discovery
+- ADR-011 (Plugin Infrastructure Support) uses catalog ConfigMaps for image discovery
 
 **Open questions for implementation:**
 - Catalog conflict resolution: What if same plugin exists in multiple catalogs? Is it allowed at all?
