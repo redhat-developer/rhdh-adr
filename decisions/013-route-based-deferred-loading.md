@@ -2,20 +2,19 @@
 
 ## Context
 
-**Problem**: The `dynamicFrontendFeaturesLoader` in the New Frontend System (NFS) eagerly loads all dynamic frontend plugins at startup via Module Federation, regardless of which page the user visits. In RHDH deployments with 40+ dynamic plugins, this causes 12s Time to Interactive, 12s Largest Contentful Paint, and a Lighthouse performance score of 43/100.
+**Problem**: The `dynamicFrontendFeaturesLoader` in the New Frontend System (NFS) eagerly loads all dynamic frontend plugins at startup via Module Federation, regardless of which page the user visits.
 
-The page becomes interactive only after **all 41 plugin scripts** are fetched and executed. With route-based deferred loading, visiting `/catalog` would load only the catalog plugin and its dependencies (~3-5 scripts), reducing TTI significantly.
-
-**Lighthouse Performance Report** (NFS mode, `/catalog` page, 40+ dynamic plugins):
+**Lighthouse Performance Report** (RHDH on OpenShift cluster, `/intelligent-assistant` page, 16-18 dynamic plugins):
 
 | Metric | Value |
 |--------|-------|
-| Performance Score | 43/100 |
-| Largest Contentful Paint (LCP) | 12.0s |
-| Time to Interactive (TTI) | 12.2s |
-| Total Blocking Time (TBT) | 1,560ms |
-| Network Requests | 90 (41 scripts) |
-| Total Transfer Size | ~11.5 MB |
+| Performance Score | 55/100 |
+| First Contentful Paint (FCP) | 6.0s |
+| Largest Contentful Paint (LCP) | 13.9s |
+| Speed Index | 10.7s |
+| Total Payload | ~6.5 MB |
+
+With just 16-18 dynamic plugins, LCP is already 13.9s. Production deployments targeting 40-80+ plugins will scale linearly worse. Visiting `/intelligent-assistant` should not require downloading and executing code for every other plugin in the system.
 
 The current loader iterates every remote unconditionally:
 
@@ -185,15 +184,12 @@ Plugins that attach as entity tabs (e.g., `@backstage-community/plugin-topology`
 - **Approach**: Depend entirely on the upstream RFC (`https://github.com/backstage/backstage/issues/35037`) being accepted and implemented
 - **Rejected because**: Upstream timeline is uncertain. RHDH needs the performance improvement regardless. The `rhdhDynamicFeaturesLoader` can be deprecated once upstream ships.
 
-### Alternative 3: Static configuration of all plugin routes
-- **Approach**: Define all plugin routes in `app-config.yaml` with no `package.json` metadata
-- **Rejected because**: Operators would need to maintain a mapping of every plugin to its route — error-prone and fragile. Convention + metadata is self-documenting.
 
 ## Consequences
 
 ### Positive
-- ✅ Initial page load fetches only ~3-5 plugins instead of 40+
-- ✅ TTI reduction from ~12s to under ~3s
+- ✅ Initial page load fetches only plugins relevant to the current route instead of all 16-18+ registered plugins
+- ✅ Significant LCP/TTI reduction proportional to the number of deferred plugins
 - ✅ No breaking changes — backward compatible with existing deployments
 - ✅ Most plugins need zero changes (convention-based)
 - ✅ Solution aligns with upstream RFC — can be deprecated when upstream ships
