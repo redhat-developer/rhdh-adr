@@ -48,7 +48,7 @@ This is a statement of existing practice, not a change in behavior.
 ### Implementation approach
 
 1. **At published EOL**: Stop running E2E nightly jobs (and related test-channel workloads) and PR-check CI jobs for that minor stream.
-2. **Support-only exceptions**: Do not keep those jobs running, and **do not restore them** for a support-only exception window (including accidental or ad-hoc re-enable) without a new architectural decision. In-scope work is Support answering tickets per the exception agreement, not engineering test coverage.
+2. **Support-only exceptions**: Do not keep those jobs running for a support-only exception window. In-scope work is Support answering tickets per the exception agreement, not engineering test coverage.
 3. **Future delivery obligations**: If a future exception or EUS requires new builds or patches, that is a different commitment and needs a separate decision; this ADR does not cover it.
 
 How job configs are removed from active use (disable, delete, archive) is left to CI maintainers as an implementation detail.
