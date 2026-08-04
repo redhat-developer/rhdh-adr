@@ -55,11 +55,7 @@ How job configs are removed from active use (disable, delete, archive) is left t
 - **Approach**: Run only platforms/install methods known to be used by exception customers
 - **Rejected because**: Still pays cost and maintenance for frozen code; the support-only exception type does not require ongoing test coverage, and customer platform mix is often incomplete or unclear
 
-### Alternative 3: Decide case-by-case in Architecture calls
-- **Approach**: Re-discuss each EOL stream and each support-exception request as it appears
-- **Rejected because**: No predictable process for CI, Support, and engineering; this ADR exists to document the default for support-only exceptions
-
-### Alternative 4: On-demand / manual re-run of EOL jobs for a Support ticket
+### Alternative 3: On-demand / manual re-run of EOL jobs for a Support ticket
 - **Approach**: Leave continuous CI off, but allow CI maintainers to manually re-trigger EOL-stream E2E or PR-check jobs when Support asks for signal on a ticket
 - **Rejected because**: Not continuous coverage, still incurs ops and cluster cost, and blurs CI policy with ticket triage. One-off reproduction for a customer case remains a Support / engineering escalation outside this ADR, not a standing CI obligation
 
