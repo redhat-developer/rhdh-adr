@@ -4,13 +4,13 @@
 
 ### Problem
 
-Unclear whether CI testing for an RHDH minor stream should keep running (or be restored) after published End of Life when customers have support exceptions.
+Unclear whether CI testing for an RHDH release stream should keep running (or be restored) after published End of Life when customers have support exceptions.
 
 RHDH publishes a [product life cycle](https://access.redhat.com/support/policy/updates/developerhub). After the Maintenance Support phase ends, the release is End of Life: software and documentation may remain available, but **no technical support will be provided** under that policy. CI maintainers therefore stop related CI jobs and test channels at EOL. Separately, commercial support exceptions can still cover customers on that stream past EOL. That raised the question of whether engineering must keep CI alive for the exception window.
 
 This ADR documents existing practice that was already followed but not written down. It came into focus when the 1.8 test channel was archived on the EOL date while customers remained under support exception, and was aligned in an Architecture call (following Slack discussion with CI maintainers).
 
-Recent past-EOL support exceptions for RHDH (for example on the 1.5 and 1.8 streams) used the Support Exception type:
+Recent past-EOL support exceptions for RHDH used the Support Exception type:
 
 > Support for a product version past published EOL - support only - no bug or CVE fixes or patching
 
@@ -18,7 +18,7 @@ That classification does not restore Full or Maintenance Support delivery: there
 
 ### Scope of CI testing in this ADR
 
-**E2E nightly** jobs for that minor stream (including related test-channel workloads) **and PR checks that live as CI jobs** for that stream. Konflux / productization pipelines are out of scope (see below).
+**E2E nightly** jobs for that release stream (including related test-channel workloads) **and PR checks that live as CI jobs** for that stream. Konflux / productization pipelines are out of scope (see below).
 
 ### Who is impacted
 
@@ -41,13 +41,13 @@ That classification does not restore Full or Maintenance Support delivery: there
 
 ## Decision
 
-Stop CI testing for an RHDH minor stream when that stream reaches published EOL: E2E nightly jobs and PR checks that live as CI jobs. Support-only support exceptions do not keep that testing in scope.
+Stop CI testing for an RHDH release stream when that stream reaches published EOL: E2E nightly jobs and PR checks that live as CI jobs. Support-only support exceptions do not keep that testing in scope.
 
 This is a statement of existing practice, not a change in behavior.
 
 ### Implementation approach
 
-1. **At published EOL**: Stop running E2E nightly jobs (and related test-channel workloads) and PR-check CI jobs for that minor stream.
+1. **At published EOL**: Stop running E2E nightly jobs (and related test-channel workloads) and PR-check CI jobs for that release stream.
 2. **Support-only exceptions**: Do not keep those jobs running for a support-only exception window. In-scope work is Support answering tickets per the exception agreement, not engineering test coverage.
 3. **Future delivery obligations**: If a future exception or EUS requires new builds or patches, that is a different commitment and needs a separate decision; this ADR does not cover it.
 
