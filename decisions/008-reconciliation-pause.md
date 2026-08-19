@@ -43,15 +43,20 @@ Add an annotation-based reconciliation pause: when `rhdh.redhat.com/pause: "true
 
 1. **Annotation check at reconcile entry**: Immediately after loading the Backstage CR in the `Reconcile` function, check for the `rhdh.redhat.com/pause` annotation. If set to `"true"`, update the status condition and return without performing any reconciliation steps (no `preprocessSpec`, no `InitObjects`, no `applyObjects`).
 
-2. **Status condition while paused**: Set the `Deployed` condition to reflect the paused state:
+2. **Status condition while paused**: The existing `Deployed` condition is **preserved as-is** — its last-known value reflects the actual workload state and must not be overwritten. A separate `Paused` condition is added to signal that reconciliation is halted:
    ```yaml
    status:
      conditions:
        - type: Deployed
+         status: "False"           # preserved from before pause — reflects actual state
+         reason: DeployFailed
+         message: "failed to apply backstage objects: ..."
+       - type: Paused
          status: "True"
-         reason: Paused
+         reason: UserRequested
          message: "Reconciliation paused by user"
    ```
+   This avoids falsely signaling a healthy deployment when the workload may be unhealthy or never deployed. When reconciliation resumes, the `Paused` condition is removed and the `Deployed` condition is updated by normal reconciliation logic.
 
 3. **Deletion is not blocked**: If the Backstage CR is being deleted (has a `DeletionTimestamp`), the pause annotation is ignored and finalizer logic runs normally. This prevents the Crossplane anti-pattern where paused resources cannot be garbage collected.
 
@@ -60,6 +65,19 @@ Add an annotation-based reconciliation pause: when `rhdh.redhat.com/pause: "true
 5. **Unpause triggers immediate reconciliation**: Since the annotation change triggers a watch event on the Backstage CR, removing the annotation causes the operator to reconcile immediately without waiting for the next scheduled sync.
 
 **Implementation in `backstage_controller.go`:**
+
+The reconciler needs an `EventRecorder` (standard controller-runtime pattern, injected via the manager):
+
+```go
+type BackstageReconciler struct {
+    client.Client
+    Scheme   *runtime.Scheme
+    Platform platform.Platform
+    Recorder record.EventRecorder  // added for pause/resume audit trail
+}
+```
+
+Pause check with event recording and resume detection:
 
 ```go
 func (r *BackstageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -74,16 +92,30 @@ func (r *BackstageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
         return ctrl.Result{}, fmt.Errorf("failed to load backstage deployment from the cluster: %w", err)
     }
 
+    isPaused := backstage.GetAnnotations()["rhdh.redhat.com/pause"] == "true"
+    wasPaused := meta.IsStatusConditionTrue(backstage.Status.Conditions, "Paused")
+
     // Pause check — skip reconciliation if paused (but allow deletion)
-    if backstage.GetAnnotations()["rhdh.redhat.com/pause"] == "true" &&
-        backstage.DeletionTimestamp.IsZero() {
-        lg.Info("reconciliation paused for this backstage instance")
-        setStatusCondition(&backstage, api.BackstageConditionTypeDeployed,
-            metav1.ConditionTrue, "Paused", "Reconciliation paused by user")
+    if isPaused && backstage.DeletionTimestamp.IsZero() {
+        if !wasPaused {
+            // Transition: running → paused
+            r.Recorder.Event(&backstage, corev1.EventTypeNormal,
+                "ReconciliationPaused", "Reconciliation paused by user")
+        }
+        // Preserve existing Deployed condition as-is; only add/update Paused condition
+        setStatusCondition(&backstage, "Paused",
+            metav1.ConditionTrue, "UserRequested", "Reconciliation paused by user")
         if err := r.Client.Status().Update(ctx, &backstage); err != nil {
             return ctrl.Result{}, err
         }
         return ctrl.Result{}, nil
+    }
+
+    // Resume detection: was paused, now unpaused
+    if wasPaused && !isPaused {
+        r.Recorder.Event(&backstage, corev1.EventTypeNormal,
+            "ReconciliationResumed", "Reconciliation resumed by user")
+        meta.RemoveStatusCondition(&backstage.Status.Conditions, "Paused")
     }
 
     // ... existing reconciliation logic continues unchanged
@@ -96,9 +128,9 @@ func (r *BackstageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 # Pause reconciliation for a specific instance
 kubectl annotate backstage my-rhdh rhdh.redhat.com/pause=true
 
-# Verify pause is active
-kubectl get backstage my-rhdh -o jsonpath='{.status.conditions[0].reason}'
-# Output: Paused
+# Verify pause is active (check the Paused condition)
+kubectl get backstage my-rhdh -o jsonpath='{.status.conditions[?(@.type=="Paused")].status}'
+# Output: True
 
 # Make manual fixes (database, config, image, PVC, etc.)
 kubectl set image deployment/backstage-my-rhdh backstage-backend=quay.io/rhdh/rhdh:1.8.5
