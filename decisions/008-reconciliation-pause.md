@@ -100,16 +100,17 @@ func (r *BackstageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
     // Pause check — skip reconciliation if paused (but allow deletion)
     if isPaused && backstage.DeletionTimestamp.IsZero() {
         if !wasPaused {
-            // Transition: running → paused
+            // Transition: running → paused — update status and emit event once
             r.Recorder.Event(&backstage, corev1.EventTypeNormal,
                 "ReconciliationPaused", "Reconciliation paused by user")
+            setStatusCondition(&backstage, "Paused",
+                metav1.ConditionTrue, "UserRequested", "Reconciliation paused by user")
+            if err := r.Client.Status().Update(ctx, &backstage); err != nil {
+                return ctrl.Result{}, err
+            }
         }
-        // Preserve existing Deployed condition as-is; only add/update Paused condition
-        setStatusCondition(&backstage, "Paused",
-            metav1.ConditionTrue, "UserRequested", "Reconciliation paused by user")
-        if err := r.Client.Status().Update(ctx, &backstage); err != nil {
-            return ctrl.Result{}, err
-        }
+        // Already paused — return without writing status to avoid a hot loop
+        // (status writes bump resourceVersion, triggering another reconciliation)
         return ctrl.Result{}, nil
     }
 
