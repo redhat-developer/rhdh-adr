@@ -137,9 +137,23 @@ kubectl get backstage my-rhdh -o jsonpath='{.status.conditions[?(@.type=="Paused
 # Make manual fixes (database, config, image, PVC, etc.)
 kubectl set image deployment/backstage-my-rhdh backstage-backend=quay.io/rhdh/rhdh:1.8.5
 
+# Fix the root cause in the CR spec or config BEFORE resuming
+kubectl edit backstage my-rhdh  # e.g., fix database config, plugin settings, etc.
+
 # Resume reconciliation
 kubectl annotate backstage my-rhdh rhdh.redhat.com/pause-
 ```
+
+**Resume behavior:** When the pause annotation is removed, the operator runs a full reconciliation with Server-Side Apply (`Force: true`). This **overwrites all manual changes** made while paused — the operator restores its desired state from the CR spec and default templates. Manual fixes to Deployments, ConfigMaps, or other operator-managed resources do not survive the resume.
+
+This means pause is for **diagnosis and temporary stabilization**, not permanent manual overrides. The correct workflow is:
+
+1. **Pause** — stop the operator from interfering
+2. **Diagnose** — make manual changes to identify the problem (test different images, check database, etc.)
+3. **Fix the source of truth** — update the CR spec, ConfigMap, or operator config to address the root cause
+4. **Resume** — operator reconciles with the corrected configuration
+
+**Pause vs. idle:** The existing `rhdh.redhat.com/idle` annotation is not a substitute for pause. Idle runs the full reconcile loop and applies all resources via SSA — it just sets replicas to 0. The operator is still actively managing the instance, so manual changes to operator-managed resources are still overwritten. Pause skips the entire reconcile loop, leaving all cluster resources untouched.
 
 ## Alternatives Considered
 
