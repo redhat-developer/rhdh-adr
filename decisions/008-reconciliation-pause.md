@@ -64,6 +64,8 @@ Add an annotation-based reconciliation pause: when `rhdh.redhat.com/pause: "true
 
 5. **Unpause triggers immediate reconciliation**: Since the annotation change triggers a watch event on the Backstage CR, removing the annotation causes the operator to reconcile immediately without waiting for the next scheduled sync.
 
+6. **`operator-lib` provides this out of the box**: The Operator Framework's shared library [`operator-lib`](https://github.com/operator-framework/operator-lib/pull/60) implements annotation-based pause as a reusable `Predicate` and `EventHandler` via `NewPause(key)`. This was added after an [Operator SDK maintainer explicitly recommended annotation over spec field](https://github.com/operator-framework/operator-sdk/issues/3418#issuecomment-661149919) for pause semantics. The RHDH operator can either adopt `operator-lib` as a dependency and use `NewPause("rhdh.redhat.com/pause")`, or implement the equivalent logic manually (~10 lines). The team should decide based on whether the additional dependency is justified.
+
 **Implementation in `backstage_controller.go`:**
 
 The reconciler needs an `EventRecorder` (standard controller-runtime pattern, injected via the manager):
@@ -181,7 +183,8 @@ kubectl annotate backstage my-rhdh rhdh.redhat.com/pause-
 - [Strimzi pause reconciliation](https://strimzi.io/blog/2025/04/10/phased-strimzi-upgrade-example/) — annotation-based, phased upgrade pattern
 - [HyperShift pausedUntil](https://hypershift-docs.netlify.app/how-to/pause-reconciliation/) — auto-expiring pause
 - [Crossplane pause issue #4839](https://github.com/crossplane/crossplane/issues/4839) — anti-pattern: deletion blocked by pause
-- [Operator SDK discussion #3418](https://github.com/operator-framework/operator-sdk/issues/3418) — framework-level pause discussion
+- [Operator SDK discussion #3418](https://github.com/operator-framework/operator-sdk/issues/3418) — framework-level pause discussion (maintainer recommended annotation over spec field)
+- [operator-lib PR #60](https://github.com/operator-framework/operator-lib/pull/60) — official `NewPause(key)` implementation in operator-framework's shared library
 - [RHDHSUPP-404](https://redhat.atlassian.net/browse/RHDHSUPP-404) — pgvector schema conflict (triggering issue)
 - [RHDHSUPP-364](https://redhat.atlassian.net/browse/RHDHSUPP-364) — lock file deadlock
 - [RHDHSUPP-400](https://redhat.atlassian.net/browse/RHDHSUPP-400) — plugin failure after upgrade
