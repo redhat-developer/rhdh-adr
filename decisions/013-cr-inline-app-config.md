@@ -2,9 +2,9 @@
 
 ## Context
 
-**Problem**: Users cannot easily define custom application configuration without creating and managing separate ConfigMaps.
+**Problem**: Users of the RHDH Operator cannot easily define custom application configuration without creating and managing separate ConfigMaps.
 
-Currently, all app-config customization must be externalized to ConfigMaps, which creates friction for users who want to:
+Currently, the operator requires all app-config customization to be externalized to ConfigMaps, which creates friction for users who want to:
 - Define simple, single app-config fragments directly in the Backstage CR
 - View and modify app-config inline with their instance definition
 - Avoid the overhead of creating and maintaining ConfigMaps for small configuration changes
@@ -78,5 +78,3 @@ Merge order: `pre-config-1` → `pre-config-2` → `raw` → `post-config-1`
 
 ### Neutral
 ⚖️ ConfigMap `injectionOrder` field introduces new CR schema extension - need clear documentation for discoverability
-⚖️ Config validation happens at reconciliation time, not creation time (errors discovered after deployment)
-⚖️ Encourages inline configuration, may diverge from external config management tools (Helm, Kustomize)
