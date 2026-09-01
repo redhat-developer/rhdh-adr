@@ -59,6 +59,16 @@ suggest_next_number() {
 if [ "${1:-}" = "--ci-suggest" ]; then
   base_ref="${2:?Usage: suggest-next-adr.sh --ci-suggest <base-ref>}"
   git fetch origin "${base_ref}"
+  
+while IFS= read -r added; do
+  [ -z "$added" ] && continue
+  git cat-file -e "origin/${base_ref}:${added}" 2>/dev/null || continue
+  errors="ADR filename conflict: ${added} already exists on ${base_ref}"
+  echo "$errors"
+  set_github_output error "$errors"
+  exit 1
+ done < <(git diff --name-only --diff-filter=A "origin/${base_ref}..HEAD" -- 'decisions/*.md') 
+
   file=$(git diff --name-only --diff-filter=AM "origin/${base_ref}..HEAD" -- 'decisions/*.md' | head -1)
   if [ -z "$file" ]; then
     echo "No ADR files changed."
@@ -71,23 +81,17 @@ if [ "${1:-}" = "--ci-suggest" ]; then
     suffix="${basename%.md}"
   fi
   suffix="${suffix%.md}"
-  next=$(bash "$0" --number-only --ref "origin/${base_ref}")
 
+  next=$(bash "$0" --number-only --ref "origin/${base_ref}")
+  suggestion="Recommended: \`decisions/${next}-${suffix}\`"
+  echo "$suggestion"
+  set_github_output suggestion "$suggestion"
   current="${basename:0:3}"
   if [[ "$basename" =~ ^[0-9]{3}- ]] && [ "$current" != "$next" ]; then
-    errors="ADR number mismatch: $basename uses $current but next available is $next"
-    suggestion="- Use \`decisions/${next}-${suffix}\`"
-    echo "$errors"
-    set_github_output error "$errors"
-    set_github_output suggestion "$suggestion"
-    exit 1
+    echo "Note: ${basename} uses ${current}; next recommended number is ${next}"
   fi
-
-  suggestion="- Use \`decisions/${next}-${suffix}\`"
-  set_github_output suggestion "$suggestion"
-  echo "Suggested: decisions/${next}-${suffix}"
   exit 0
-fi
+ fi
 
 if [ "${1:-}" = "--number-only" ]; then
   ref=""
