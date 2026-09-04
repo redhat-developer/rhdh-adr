@@ -94,7 +94,7 @@ if [ "${1:-}" = "--ci-suggest" ]; then
   next=$(bash "$0" --number-only --ref "origin/${base_ref}")
   current="${basename:0:3}"
   if [ "$current" != "$next" ]; then
-    suggestion="Recommended: \`decisions/${next}-${suffix}\` to follow the order of files in decisions/ folder of rhdh-adr."
+    suggestion="Recommended to name the next ADR file as: \`decisions/${next}-${suffix}\` to follow the order of files in decisions/ folder of rhdh-adr."
     echo "$suggestion"
     set_github_output suggestion "$suggestion"
   fi
