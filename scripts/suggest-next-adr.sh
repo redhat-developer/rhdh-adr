@@ -59,33 +59,46 @@ suggest_next_number() {
 if [ "${1:-}" = "--ci-suggest" ]; then
   base_ref="${2:?Usage: suggest-next-adr.sh --ci-suggest <base-ref>}"
   git fetch origin "${base_ref}"
+  
+  merge_base=$(git merge-base "origin/${base_ref}" HEAD)
+  while IFS= read -r added; do
+    [ -z "$added" ] && continue
+    git cat-file -e "origin/${base_ref}:${added}" 2>/dev/null || continue
+    errors="ADR filename conflict: ${added} already exists on ${base_ref}, change to a different filename in the format NNN-kebab-case-title.md (e.g. 008-my-decision.md)"
+    echo "$errors"
+    set_github_output error "$errors"
+    exit 1
+  done < <(git diff --name-only --diff-filter=A "${merge_base}..HEAD" -- 'decisions/*.md')
+
+  adr_name_pattern='^[0-9]{3}-[a-z0-9]+(-[a-z0-9]+)*\.md$'
+  while IFS= read -r changed; do
+    [ -z "$changed" ] && continue
+    base=$(basename "$changed")
+    if [[ ! "$base" =~ $adr_name_pattern ]]; then
+      errors="ADR filename must be NNN-kebab-case-title.md (e.g. 008-my-decision.md): ${changed}"
+      echo "$errors"
+      set_github_output error "$errors"
+      exit 1
+    fi
+  done < <(git diff --name-only --diff-filter=AM "origin/${base_ref}..HEAD" -- 'decisions/*.md')
+
   file=$(git diff --name-only --diff-filter=AM "origin/${base_ref}..HEAD" -- 'decisions/*.md' | head -1)
   if [ -z "$file" ]; then
     echo "No ADR files changed."
     exit 0
   fi
+
   basename=$(basename "$file")
-  if [[ "$basename" =~ ^[0-9]{3}- ]]; then
-    suffix="${basename:4}"
-  else
-    suffix="${basename%.md}"
-  fi
+  suffix="${basename:4}"
   suffix="${suffix%.md}"
+
   next=$(bash "$0" --number-only --ref "origin/${base_ref}")
-
   current="${basename:0:3}"
-  if [[ "$basename" =~ ^[0-9]{3}- ]] && [ "$current" != "$next" ]; then
-    errors="ADR number mismatch: $basename uses $current but next available is $next"
-    suggestion="- Use \`decisions/${next}-${suffix}\`"
-    echo "$errors"
-    set_github_output error "$errors"
+  if [ "$current" != "$next" ]; then
+    suggestion="Recommended to name the next ADR file as: \`decisions/${next}-${suffix}\` to follow the order of files in decisions/ folder of rhdh-adr."
+    echo "$suggestion"
     set_github_output suggestion "$suggestion"
-    exit 1
   fi
-
-  suggestion="- Use \`decisions/${next}-${suffix}\`"
-  set_github_output suggestion "$suggestion"
-  echo "Suggested: decisions/${next}-${suffix}"
   exit 0
 fi
 
