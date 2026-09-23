@@ -33,14 +33,14 @@
 ## Consequences
 
 ### Positive
-✅ [Benefit 1]
-✅ [Benefit 2]
-✅ [Benefit 3]
+- ✅ [Benefit 1]
+- ✅ [Benefit 2]
+- ✅ [Benefit 3]
 
 ### Negative
-❌ [Trade-off or limitation 1]
-❌ [Trade-off or limitation 2]
+- ❌ [Trade-off or limitation 1]
+- ❌ [Trade-off or limitation 2]
 
 ### Neutral
-⚖️ [Neutral consequence 1]
-⚖️ [Neutral consequence 2]
+- ⚖️ [Neutral consequence 1]
+- ⚖️ [Neutral consequence 2]

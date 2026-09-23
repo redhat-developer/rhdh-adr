@@ -1,0 +1,18 @@
+name: ADR Number Check
+on:
+  pull_request:
+    paths:
+      - 'decisions/**'
+      - 'scripts/suggest-next-adr.sh'
+permissions:
+  contents: read
+jobs:
+  suggest-adr-number:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Suggest next ADR filename
+        id: suggest
+        run: bash scripts/suggest-next-adr.sh --ci-suggest "${{ github.base_ref }}"

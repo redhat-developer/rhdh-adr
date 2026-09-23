@@ -5,6 +5,7 @@
 An **Architecture Decision Record (ADR)** is a document that captures an important architectural decision made along with its context and consequences.
 
 **Purpose:**
+
 - **Provide a predictable space for asynchronous discussion** - ADRs give teams a dedicated location to review and discuss architectural decisions thoughtfully at their own pace, without needing to coordinate meeting schedules
 - **Focus on architecture, not implementation** - Unlike issue trackers (JIRA) which focus on implementation tasks, ADRs focus on the "why" - exploring problems, trade-offs, and alternatives before diving into how to build
 - **Document and preserve decision history** - Captures why choices were made, what alternatives were considered, and the trade-offs involved. Prevents revisiting settled decisions and maintains institutional memory as the team evolves
@@ -20,6 +21,7 @@ Write an ADR when making decisions that:
 ✅ **Need team alignment** (e.g., flavour system design, plugin infrastructure)
 
 ❌ **Don't write ADRs for:**
+
 - Implementation details (how to write a specific function)
 - Temporary workarounds
 - Obvious choices with no alternatives
@@ -30,6 +32,7 @@ Write an ADR when making decisions that:
 ### Required Sections
 
 #### 1. **Title**
+
 ```markdown
 # ADR: [Short Title of Decision]
 ```
@@ -43,6 +46,7 @@ Write an ADR when making decisions that:
   - ❌ "A discussion about how we should handle flavours" (too wordy)
 
 #### 2. **Context**
+
 ```markdown
 ## Context
 
@@ -52,6 +56,7 @@ Write an ADR when making decisions that:
 ```
 
 **What to include:**
+
 - The problem or limitation you're addressing
 - Current state and why it's insufficient
 - Who is affected (users, developers, operators)
@@ -59,12 +64,14 @@ Write an ADR when making decisions that:
 - Requirements that must be met
 
 **Tips:**
+
 - Be specific and concrete
 - Use examples to illustrate the problem
 - Focus on **why** the decision is needed, not **what** the decision is (that's next section)
 - This section answers: "Why are we even discussing this?"
 
 **Example:**
+
 ```markdown
 ## Context
 
@@ -82,6 +89,7 @@ This forces users to:
 ```
 
 #### 3. **Decision**
+
 ```markdown
 ## Decision
 
@@ -93,18 +101,21 @@ This forces users to:
 ```
 
 **What to include:**
+
 - Clear statement of the decision
 - Key implementation details (bullet points work well)
 - Brief code/config examples if helpful
 - How it solves the problem from Context section
 
 **Tips:**
+
 - Start with a one-sentence summary of the decision
 - Use bullet points for clarity
 - Include just enough detail to understand the approach
 - Link to separate docs for full implementation details
 
 **Example:**
+
 ```markdown
 ## Decision
 
@@ -119,6 +130,7 @@ templates for Backstage deployments.
 ```
 
 #### 4. **Consequences**
+
 ```markdown
 ## Consequences
 
@@ -135,17 +147,20 @@ templates for Backstage deployments.
 ```
 
 **What to include:**
+
 - **Positive**: Benefits and improvements
 - **Negative**: Costs, limitations, technical debt
 - **Neutral**: Notable impacts that are neither good nor bad
 
 **Tips:**
+
 - Be honest about trade-offs
 - Every decision has consequences - don't skip negative ones
 - Helps future readers understand what was sacrificed
 - Use emojis (✅ ❌ ⚖️) for visual scanning
 
 **Example:**
+
 ```markdown
 ## Consequences
 
@@ -182,11 +197,13 @@ Use this section when you evaluated multiple approaches:
 ```
 
 **When to include:**
+
 - Multiple viable solutions were discussed
 - Team debated different approaches
 - Future readers might wonder "why not X?"
 
 **When to skip:**
+
 - Only one obvious solution
 - Alternatives were clearly inferior
 - Decision was straightforward
@@ -209,11 +226,13 @@ Use this for specific implementation details:
 ```
 
 **When to include:**
+
 - Decision needs specific technical details
 - Implementation approach is complex
 - File/directory structure matters
 
 **When to skip:**
+
 - Implementation is straightforward
 - Details belong in separate implementation docs
 - Decision can be understood without implementation details
@@ -237,6 +256,7 @@ Show concrete examples of how the decision works in practice:
 ```
 
 **When to include:**
+
 - Decision affects user-facing APIs or configuration
 - Examples make the decision clearer
 - Multiple use cases need illustration
@@ -244,18 +264,27 @@ Show concrete examples of how the decision works in practice:
 ## ADR Lifecycle (GitHub PR Workflow)
 
 ADRs follow the standard GitHub PR workflow for review and approval. The PR state **is** the ADR status:
+
 - **Open PR** = Proposed (under discussion)
 - **Merged PR** = Accepted (immutable)
 - **Closed PR** (not merged) = Rejected
 
 ### 1. **Creating an ADR** → Open PR
 
+**Filename convention:** `decisions/NNN-kebab-case-title.md` (e.g. `006-plugin-discovery.md`).
+
+**Use the** `./scripts/suggest-next-adr.sh` **bash script to get the next appropriate ADR name:** 
+
+- Get the next number (lowest gap, then `max + 1` - same logic as CI).
+
 ```bash
+#Bash script that is used to get the next approrpriate ADR name
+./scripts/suggest-next-adr.sh
 # Create a feature branch
-git checkout -b adr/flavor-multi-tenancy
+git checkout -b adr/NNN-my-decision-title
 
 # Copy the template
-cp ADR-TEMPLATE.md decisions/ADR-multi-tenancy.md
+cp ADR-TEMPLATE.md decisions/006-my-decision-title.md
 
 # Write your ADR
 # Fill in: Context, Decision, Consequences, etc.
@@ -275,6 +304,7 @@ gh pr create --title "ADR: Multi-tenancy support for flavours" \
 ### 2. **Reviewing an ADR** → PR Comments & Reviews
 
 **Review process:**
+
 - Team members comment on specific sections
 - Request changes for unclear reasoning
 - Suggest alternatives not considered
@@ -282,12 +312,14 @@ gh pr create --title "ADR: Multi-tenancy support for flavours" \
 - Question trade-offs in Consequences
 
 **Author responsibilities:**
+
 - Address feedback by updating the ADR
 - Add alternatives raised during review
 - Refine rationale based on discussion
 - Push updates to the same branch/PR
 
 **Tips:**
+
 - Use PR line comments for specific feedback
 - Use PR general comments for overall direction
 - Mark conversations as resolved when addressed
@@ -296,6 +328,7 @@ gh pr create --title "ADR: Multi-tenancy support for flavours" \
 ### 3. **Accepting an ADR** → PR Approval & Merge
 
 **When ready to finalize:**
+
 1. Team approves the PR (minimum approvals per your repo policy)
 2. Merge the PR
 
@@ -305,11 +338,13 @@ gh pr merge --squash  # or --merge, per your repo policy
 ```
 
 **Result:**
+
 - ADR is now in main branch (accepted and immutable)
 - Implementation can begin
 - PR provides permanent discussion history
 
 **Timeline:**
+
 ```
 PR Open (proposed)
     ↓
@@ -324,6 +359,7 @@ PR Review & Discussion
 ADRs are **immutable** once merged. For changes:
 
 #### **Minor clarifications:**
+
 Open a PR that adds a note to the existing ADR without changing the original decision.
 
 ```markdown
@@ -334,6 +370,7 @@ This doesn't change the decision but adds context.
 ```
 
 #### **Major changes:**
+
 Create a **new ADR**. The new ADR can reference the previous one for context.
 
 ```bash
@@ -365,6 +402,7 @@ git commit -m "ADR: Multi-tenancy v2"
 ## Questions?
 
 If unsure whether to write an ADR, ask:
+
 1. Will someone in 6 months wonder why we did this?
 2. Did we debate alternatives or make trade-offs?
 3. Does this affect how other teams work?
