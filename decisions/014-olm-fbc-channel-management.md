@@ -61,6 +61,7 @@ On the `rhdh-1.10-rhel-9` branch, add the same `fast` channel guard to prevent 1
 **Implementation approach**:
 
 - Update the operator bundle metadata (default channel, CSV `skipRange`) upstream on `main` and `release-2.1`
+- Update the default channel in the operator bundle metadata with each new minor version release (e.g., `fast-2.1` to `fast-2.2` when 2.2.0 is published)
 - Update FBC catalog files and fix the catalog rendering script in midstream
 - Freeze the `fast` channel by removing 2.y entries and fix the `skipRange`/`replaces` values in existing catalog entries
 
