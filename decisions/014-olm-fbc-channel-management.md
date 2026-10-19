@@ -2,7 +2,7 @@
 
 ## Context
 
-**Problem**: The RHDH operator's default OLM channel (`fast`) contains every version published so far — from 1.0 through the latest 2.y release — including versions with breaking changes between them. Combined with a wide `skipRange` (`>=1.0.0 <X.Y.0`) and `Automatic` being the default Subscription approval mode in OLM, users who did not explicitly change their channel or approval strategy will receive a 2.y upgrade as soon as it is published, even though the 1.y-to-2.y transition introduces breaking changes (new frontend system, configuration structure changes) that require deliberate migration.
+**Problem**: The RHDH operator's default OLM channel (`fast`) contains every version published so far — from 1.0 through the latest 2.y release — including versions with breaking changes between them. Combined with a wide `skipRange` (`>=1.0.0 <X.Y.0`) and `Automatic` being the default Subscription approval mode in OLM, users who did not explicitly change their channel or approval strategy will receive a 2.y upgrade as soon as it is published, even though the 1.y-to-2.y transition introduces major breaking changes (new frontend system, configuration structure changes) that require deliberate migration.
 
 The operator already publishes per-minor-version channels (`fast-1.10`, `fast-2.1`, `fast-2.2`, etc.), and the documentation recommends switching to these versioned channels for controlled upgrades. However, since `fast` is the default channel, users who did not switch to a versioned channel may end up with automatic upgrades across breaking version boundaries.
 
