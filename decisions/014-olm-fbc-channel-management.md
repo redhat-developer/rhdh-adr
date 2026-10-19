@@ -25,7 +25,7 @@ Deprecate the generic `fast` channel, default to per-minor-version `fast-X.Y` ch
 
 ### 1. Deprecate the `fast` channel and default to `fast-X.Y`
 
-Mark the `fast` channel with [`olm.channel.deprecations` and `olm.deprecated`](https://olm.operatorframework.io/docs/reference/file-based-catalogs/#olmdeprecations) properties in the FBC catalog. Change the default channel in the operator bundle metadata from `fast` to `fast-X.Y` (e.g., `fast-2.1`). The default channel must be updated with each new minor version release — for example, when 2.2.0 is published, the default channel moves from `fast-2.1` to `fast-2.2`.
+Mark the `fast` channel with [`olm.channel.deprecations` and `olm.deprecated`](https://olm.operatorframework.io/docs/reference/file-based-catalogs/#olmdeprecations) properties in the FBC catalog. Change the default channel in the operator bundle metadata from `fast` to `fast-X.Y` (e.g., `fast-2.1`). The default channel must be updated with each new minor version — for example, when the `release-2.2` branch is created, the default channel in that branch should be `fast-2.2`.
 
 The `fast` channel cannot be removed entirely because removing a channel breaks OLM namespace-wide resolution, which breaks dependency resolution if multiple operators are installed in the same namespace. If a user is subscribed to `fast` and the channel is removed, their Subscription enters `ResolutionFailed` status. While this would eventually push them to switch to a `fast-X.Y` channel, it would also block resolution for every other operator in that namespace. We recommend installing the RHDH operator in its own `rhdh-operator` namespace, but users may install additional operators there or run all their operators in a shared namespace. We should not break resolution for those scenarios.
 
@@ -61,7 +61,7 @@ On the `rhdh-1.10-rhel-9` branch, add the same `fast` channel guard to prevent 1
 **Implementation approach**:
 
 - Update the operator bundle metadata (default channel, CSV `skipRange`) upstream on `main` and `release-2.1`
-- Update the default channel in the operator bundle metadata with each new minor version release (e.g., `fast-2.1` to `fast-2.2` when 2.2.0 is published)
+- Update the default channel in the operator bundle metadata with each new minor version (e.g., when the `release-2.2` branch is created, the default channel in that branch should be `fast-2.2`)
 - Update FBC catalog files and fix the catalog rendering script in midstream
 - Freeze the `fast` channel by removing 2.y entries and fix the `skipRange`/`replaces` values in existing catalog entries
 
