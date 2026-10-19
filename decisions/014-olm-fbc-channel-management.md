@@ -4,7 +4,7 @@
 
 **Problem**: The RHDH operator's default OLM channel (`fast`) contains every version published so far — from 1.0 through the latest 2.y release — including versions with breaking changes between them. Combined with a wide `skipRange` (`>=1.0.0 <X.Y.0`) and `Automatic` being the default Subscription approval mode in OLM, users who did not explicitly change their channel or approval strategy will receive a 2.y upgrade as soon as it is published, even though the 1.y-to-2.y transition introduces major breaking changes (new frontend system, configuration structure changes) that require deliberate migration.
 
-The operator already publishes per-minor-version channels (`fast-1.10`, `fast-2.1`, `fast-2.2`, etc.), and the documentation recommends switching to these versioned channels for controlled upgrades. However, since `fast` is the default channel, users who did not switch to a versioned channel may end up with automatic upgrades across breaking version boundaries.
+The operator already publishes per-minor-version channels (`fast-1.10`, `fast-2.1`, `fast-2.2`, etc.), and the [product installation documentation](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.10/html-single/installing_red_hat_developer_hub_on_openshift_container_platform/index#install-the-rhdh-operator_install-rhdh-on-ocp-with-the-operator) recommends switching to these versioned channels for controlled upgrades. However, since `fast` is the default channel, users who did not switch to a versioned channel may end up with automatic upgrades across breaking version boundaries.
 
 This creates two problems:
 
@@ -25,7 +25,7 @@ Deprecate the generic `fast` channel, default to per-minor-version `fast-X.Y` ch
 
 ### 1. Deprecate the `fast` channel and default to `fast-X.Y`
 
-Mark the `fast` channel with `olm.channel.deprecations` and `olm.deprecated` properties in the FBC catalog. Change the default channel in the operator bundle metadata from `fast` to `fast-X.Y` (e.g., `fast-2.1`).
+Mark the `fast` channel with [`olm.channel.deprecations` and `olm.deprecated`](https://olm.operatorframework.io/docs/reference/file-based-catalogs/#olmdeprecations) properties in the FBC catalog. Change the default channel in the operator bundle metadata from `fast` to `fast-X.Y` (e.g., `fast-2.1`).
 
 The `fast` channel cannot be removed entirely because removing a channel breaks OLM namespace-wide resolution, which breaks dependency resolution if multiple operators are installed in the same namespace. If a user is subscribed to `fast` and the channel is removed, their Subscription enters `ResolutionFailed` status. While this would eventually push them to switch to a `fast-X.Y` channel, it would also block resolution for every other operator in that namespace. We recommend installing the RHDH operator in its own `rhdh-operator` namespace, but users may install additional operators there or run all their operators in a shared namespace. We should not break resolution for those scenarios.
 
@@ -107,3 +107,5 @@ On the `rhdh-1.10-rhel-9` branch, add the same `fast` channel guard to prevent 1
 - Upstream PRs: [#3821 (release-2.1)](https://github.com/redhat-developer/rhdh-operator/pull/3821), [#3822 (main)](https://github.com/redhat-developer/rhdh-operator/pull/3822) — Deprecate `fast`, change default channel, narrow `skipRange`
 - Midstream MRs: [!831](https://gitlab.cee.redhat.com/rhidp/rhdh/-/merge_requests/831), [!832](https://gitlab.cee.redhat.com/rhidp/rhdh/-/merge_requests/832) — Remove 2.y from `fast`; [!833](https://gitlab.cee.redhat.com/rhidp/rhdh/-/merge_requests/833), [!834](https://gitlab.cee.redhat.com/rhidp/rhdh/-/merge_requests/834) — Fix `skipRange`/`replaces` and build tooling; [!836](https://gitlab.cee.redhat.com/rhidp/rhdh/-/merge_requests/836) — 1.10 guard
 - [Slack discussion](https://redhat-internal.slack.com/archives/C04CUSD4JSG/p1791547448888109) — Original thread where the channel model was discussed and decided
+- [RHDH installation docs](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.10/html-single/installing_red_hat_developer_hub_on_openshift_container_platform/index#install-the-rhdh-operator_install-rhdh-on-ocp-with-the-operator) — Product documentation recommending versioned channels
+- [OLM FBC deprecation schema](https://olm.operatorframework.io/docs/reference/file-based-catalogs/#olmdeprecations) — `olm.deprecations` specification for marking channels as deprecated
