@@ -273,33 +273,47 @@ ADRs follow the standard GitHub PR workflow for review and approval. The PR stat
 
 **Filename convention:** `decisions/NNN-kebab-case-title.md` (e.g. `006-plugin-discovery.md`).
 
-**Use the** `./scripts/suggest-next-adr.sh` **bash script to get the next appropriate ADR name:** 
+- `NNN` — three-digit number (e.g. `008`)
+- `kebab-case-title` — lowercase letters, digits, and hyphens only
 
-- Get the next number (lowest gap, then `max + 1` - same logic as CI).
+**Use** `./scripts/suggest-next-adr.sh` **to get the next recommended ADR filename:**
+
+- Uses the lowest gap in `decisions/` on `main`, then `max + 1` (same logic as CI).
+- CI only sees ADRs already merged to `main` — not numbers proposed in other open PRs. Check open PRs manually to reduce number clashes.
 
 ```bash
-#Bash script that is used to get the next approrpriate ADR name
+# Suggested next filename (e.g. decisions/008-my-decision-title.md)
 ./scripts/suggest-next-adr.sh
-# Create a feature branch
-git checkout -b adr/NNN-my-decision-title
 
-# Copy the template
-cp ADR-TEMPLATE.md decisions/006-my-decision-title.md
+git checkout -b adr/008-my-decision-title
+cp ADR-TEMPLATE.md decisions/008-my-decision-title.md
 
-# Write your ADR
-# Fill in: Context, Decision, Consequences, etc.
+# Write your ADR (Context, Decision, Consequences, etc.)
 
-# Commit and push
-git add decisions/ADR-multi-tenancy.md
-git commit -m "ADR: Multi-tenancy support for flavours"
-git push origin adr/flavor-multi-tenancy
+git add decisions/008-my-decision-title.md
+git commit -m "ADR: My architectural decision"
+git push origin adr/008-my-decision-title
 
-# Open PR
-gh pr create --title "ADR: Multi-tenancy support for flavours" \
-  --body "Proposing architecture decision for multi-tenancy. Please review."
+gh pr create --title "ADR: My architectural decision" \
+  --body "Proposing architecture decision. Please review."
 ```
 
-**PR Title Format**: `ADR: [Short Title]`
+**PR title format:** `ADR: [Short Title]`
+
+#### CI checks (ADR Number Check)
+
+On PRs that change `decisions/**`, the [ADR Number Check workflow](.github/workflows/adr-number-check.yaml) runs `scripts/suggest-next-adr.sh --ci-suggest` against `main`.
+
+| Check | CI result | Notes |
+|-------|-----------|-------|
+| **Duplicate filename** — PR adds a path that already exists on `main` | **Fail** | Exact path match only (e.g. two PRs cannot both add `007-rhdh-local-branching-strategy.md`). |
+| **Invalid format** — not `NNN-kebab-case-title.md` | **Fail** | e.g. `bad-format.md` or `008-My_Decision.md` |
+| **Wrong number** — unique filename but not the recommended next number | **Pass** (advisory) | Suggestion appears in the Actions log |
+| **Correct number** | **Pass** | No output |
+
+Duplicate detection uses the merge-base between the PR and `main`, so it catches PRs that branched before an ADR was merged and then try to add the same filename.
+
+The same number with different suffixes is allowed (e.g. `008-a.md` and `008-b.md`) as long as the full paths are unique on `main`.
 
 ### 2. **Reviewing an ADR** → PR Comments & Reviews
 
