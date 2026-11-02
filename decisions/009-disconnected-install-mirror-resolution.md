@@ -195,7 +195,7 @@ The current [Orchestrator air-gap documentation](https://docs.redhat.com/en/docu
 
 | What | Timeline | Detail |
 |------|----------|--------|
-| **Update `prepare-restricted-environment.sh`** | 2.2 | Add `spec.relatedImages` as primary image source (backward-compatible fallback to old CSV parsing for older bundles). Add deprecation notice. |
+| **Update `prepare-restricted-environment.sh`** | 2.2 | Add `spec.relatedImages` as primary image source (backward-compatible fallback to old CSV parsing for older bundles) and ensure e2e works as expected|
 | **Deprecation notice** | 2.2 release notes | Note that the script is deprecated and will be removed in 2.3. Document the manual `spec.relatedImages`-based workflow as the replacement. |
 | **Remove from docs and repo** | 2.3 | Remove the script from customer-facing documentation and the operator repository. Optionally migrate to [rhdh-core](https://github.com/redhat-developer/rhdh) for internal E2E testing and Helm chart air-gap testing. |
 | **`mirror-plugins.sh`** | No change | Remains available for plugin OCI packages. Separate concern from container images. |
