@@ -1,37 +1,41 @@
-# ADR-009: Disconnected Install: Dual-Layer Mirror Strategy (Operator)
+# ADR-009: Disconnected Install: Extend `spec.relatedImages` to All Operator-Managed Container Images
 
 ## Executive Summary / TL;DR
 
-RHDH Operator needs two complementary mechanisms for air-gapped (disconnected) installs, each solving a different part of the problem:
+Add all operator-managed container images to the CSV's `spec.relatedImages` and honour the corresponding `RELATED_IMAGE_*` environment variables in the operator's controller code. This is the standard Red Hat operator pattern for disconnected (air-gapped) environments.
 
-1. **`spec.relatedImages` + `RELATED_IMAGE_*` env vars** — Declare all container images the operator may need in the CSV (ClusterServiceVersion). This is the standard pattern every Red Hat operator follows. It enables `oc-mirror` to discover and copy images automatically, satisfies [Conforma](https://redhat.atlassian.net/browse/RHDHSUPP-417) downstream pipeline validation, and complies with [OpenShift disconnected operator requirements](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html-single/disconnected_environments/index#olm-restricted-networks).
+**Images to add** (2 new entries for RHDH 2.1+):
+- `lightspeed-core` — the Lightspeed AI service sidecar
+- `okp` — the Offline Knowledge Portal deployment (10+ GB, optional flavour)
 
-2. **ConfigMap-based runtime mirror resolution** — Extend the operator's existing `plugin-registry-mirror` ConfigMap (already used for dynamic plugin packages) to also rewrite container image references at reconciliation time. This gives users a dynamic, platform-agnostic way to point the operator at their mirror registry — including on platforms where IDMS/ITMS are unavailable (Rosa HCP, vanilla Kubernetes).
+> The RAG init container image (`lightspeed-rag-init`) was removed in RHDH 2.1 and is no longer shipped.
 
-**Why both?** They solve different problems. `spec.relatedImages` tells tooling *what* images exist. ConfigMap resolution tells the operator *where* to pull them from at runtime. Dropping either one creates gaps: without `spec.relatedImages`, `oc-mirror` and Conforma break; without ConfigMap resolution, users on Rosa HCP or vanilla Kubernetes have no supported runtime path.
+**What this gives users**:
+- **OpenShift**: `oc-mirror` discovers all images automatically from `spec.relatedImages`. On clusters where IDMS works, resolution is transparent. On clusters where IDMS does not work (e.g., Rosa HCP), users override via Subscription or ClusterExtension `spec.config.env`.
+- **Vanilla Kubernetes**: Users extract the image list from `spec.relatedImages` with a one-liner, mirror with their own tooling, and override `RELATED_IMAGE_*` env vars on the operator deployment.
 
-**Current gap**: The operator's CSV only lists 2 images ([postgresql, backstage](https://github.com/redhat-developer/rhdh-operator/blob/main/bundle/rhdh/manifests/backstage-operator.clusterserviceversion.yaml#L498-L502)). Lightspeed/Intelligent Assistant images (lightspeed-core sidecar, OKP, RAG init container) are hidden inside flavour ConfigMaps, undiscoverable by standard tooling. The current [air-gap documentation](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.10/html/interacting_with_red_hat_developer_lightspeed_for_red_hat_developer_hub/configure-to-initialize-the-ai-assistant_interacting-with-developer-lightspeed-for-rhdh#mirror-images-for-air-gapped-environments_configure-to-initialize-the-ai-assistant) acknowledges this:
+**What this does NOT include**: Extending the ConfigMap-based mirror resolution (currently used for dynamic plugin OCI packages) to container images. After team discussion, this was determined to be unnecessary — the `RELATED_IMAGE_*` env var override mechanism already covers all platforms, and extending the ConfigMap approach to containers risks reinventing IDMS and creating user confusion. The existing ConfigMap mechanism for plugin OCI packages remains unchanged and is not affected by this ADR.
 
-> "The `prepare-restricted-environment.sh` script does **not automatically parse Developer Lightspeed for RHDH images from the bundle manifest**, so mirror these images manually before running the script."
+**Script deprecation**: The `prepare-restricted-environment.sh` helper script will be deprecated in 2.2 and removed from documentation and the operator repository in 2.3. It may be migrated internally to [rhdh-core](https://github.com/redhat-developer/rhdh) for E2E testing and Helm chart support.
+
+- [RHDHPLAN-1887](https://redhat.atlassian.net/browse/RHDHPLAN-1887)
+- [RHDHSUPP-417](https://redhat.atlassian.net/browse/RHDHSUPP-417)
 
 ---
 
 ## Glossary: Key Terms Explained
 
-Before diving in, here is what the technical terms in this ADR mean:
-
 | Term | What it means |
 |------|---------------|
-| **CSV** (ClusterServiceVersion) | A YAML file inside an operator's bundle that describes the operator to OLM — what it installs, what permissions it needs, and what container images it uses. Think of it as the operator's "manifest" or "bill of materials." |
+| **CSV** (ClusterServiceVersion) | A YAML file inside an operator's bundle that describes the operator to OLM — what it installs, what permissions it needs, and what container images it uses. Think of it as the operator's "bill of materials." |
 | **`spec.relatedImages`** | A section inside the CSV that lists every container image the operator might need. Disconnected tooling (`oc-mirror`) reads this list to know what to copy to the customer's mirror registry. |
-| **`RELATED_IMAGE_*` env vars** | Environment variables set on the operator's own pod (e.g., `RELATED_IMAGE_backstage=registry.example.com/rhdh@sha256:...`). The operator code reads these at startup and uses them to decide which image to put into the Backstage Deployment it creates. When OLM installs the operator on a disconnected cluster, it automatically rewrites these env vars to point at the mirror registry (via IDMS/ITMS). |
-| **IDMS / ITMS** | ImageDigestMirrorSet / ImageTagMirrorSet. OpenShift cluster-level resources that tell the container runtime (CRI-O) "when you see a pull for `registry.redhat.io/foo`, actually pull from `mirror.company.com/foo` instead." These work transparently — pods don't need to know about the mirror. But they are OpenShift-only and do not work on Rosa HCP or vanilla Kubernetes. |
+| **`RELATED_IMAGE_*` env vars** | Environment variables set on the operator's own pod (e.g., `RELATED_IMAGE_backstage=registry.example.com/rhdh@sha256:...`). The operator code reads these at startup and uses them to decide which image to put into the Kubernetes objects it creates. When OLM installs the operator on a disconnected cluster with IDMS configured, it automatically rewrites these env vars to point at the mirror registry. |
+| **IDMS / ITMS** | ImageDigestMirrorSet / ImageTagMirrorSet. OpenShift cluster-level resources that tell the container runtime (CRI-O) "when you see a pull for `registry.redhat.io/foo`, actually pull from `mirror.company.com/foo` instead." These work transparently — pods don't need to know about the mirror. They are OpenShift-only and do not work on Rosa HCP or vanilla Kubernetes. |
 | **`oc-mirror`** | Red Hat's official CLI tool for copying operator images to a disconnected mirror registry. It reads `spec.relatedImages` from the CSV to know which images to copy. If an image isn't listed there, `oc-mirror` won't copy it. |
-| **Conforma** | A validation framework in Red Hat's downstream build pipelines. It checks, among other things, that all images in `spec.relatedImages` come from trusted registries. If we skip `spec.relatedImages`, Conforma checks can't validate our images. |
-| **ConfigMap mirror resolution** | A mechanism already built into the RHDH operator for dynamic plugins. Users create a Kubernetes ConfigMap with "source → mirror" mappings. The operator reads this ConfigMap and rewrites image URLs before creating Kubernetes objects. Pods see already-resolved mirror paths. |
+| **Conforma** | A validation framework in Red Hat's downstream build pipelines. It checks, among other things, that all images in `spec.relatedImages` come from trusted registries. |
 | **Flavour** | An RHDH operator concept. A flavour is a bundle of configuration (ConfigMaps) that enables a feature set — e.g., `intelligent-assistant` adds Lightspeed AI capabilities, `orchestrator` adds workflow support. Flavours can define additional container images and plugin packages. |
-| **Rosa HCP** | Red Hat OpenShift Service on AWS with Hosted Control Planes. A managed OpenShift variant where IDMS/ITMS are not available because the control plane is managed by Red Hat, not the customer. |
-| **OCI package** | A container-image-shaped artifact that contains a dynamic plugin (JavaScript code, not a running container). Stored in a container registry but extracted and loaded by the plugin installer, not run as a pod. |
+| **Rosa HCP** | Red Hat OpenShift Service on AWS with Hosted Control Planes. A managed OpenShift variant where IDMS/ITMS are not available because the control plane is managed by Red Hat, not the customer. Users can still override `RELATED_IMAGE_*` env vars via Subscription or ClusterExtension. |
+| **OCI package** | A container-image-shaped artifact that contains a dynamic plugin (JavaScript code, not a running container). Stored in a container registry but extracted and loaded by the plugin installer, not run as a pod. IDMS does not apply to these because they are pulled inside a container by skopeo, not by the kubelet. |
 
 ---
 
@@ -45,7 +49,7 @@ When an organisation runs RHDH on a network with no internet access (a "disconne
 2. **Mirror** — Copy those images from the public registry to the internal registry
 3. **Resolve** — Tell the running operator and its pods where to pull from (the mirror, not the internet)
 
-Today, RHDH has gaps in all three steps for Lightspeed / Intelligent Assistant images.
+Today, RHDH has gaps in discovery and resolution for Lightspeed / Intelligent Assistant images.
 
 ### What Works Today
 
@@ -55,22 +59,18 @@ Today, RHDH has gaps in all three steps for Lightspeed / Intelligent Assistant i
 - ✅ Declared as [`RELATED_IMAGE_*` env vars](https://github.com/redhat-developer/rhdh-operator/blob/main/bundle/rhdh/manifests/backstage-operator.clusterserviceversion.yaml#L311-L316) on the operator deployment (resolved by OLM + IDMS/ITMS at runtime)
 - ✅ Operator code reads these env vars and substitutes them into the Backstage Deployment ([`deployment.go`](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/deployment.go#L112-L114)) and PostgreSQL StatefulSet ([`db-statefulset.go`](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/db-statefulset.go#L17))
 
-**Dynamic plugin OCI packages** — already have ConfigMap-based mirror resolution:
-
-- ✅ Users create a [`plugin-registry-mirror` ConfigMap](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/dynamic-plugins-mirror.go) with source → mirror mappings
-- ✅ Operator reads it during [reconciliation preprocessing](https://github.com/redhat-developer/rhdh-operator/blob/main/internal/controller/spec_preprocessor.go#L157) and rewrites plugin package URLs in [dynamic-plugins.go](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/dynamic-plugins.go#L176)
-
 ### What Does Not Work Today
 
-**Lightspeed / Intelligent Assistant images (3 of them)** are invisible to standard tooling:
+**Lightspeed / Intelligent Assistant images (2 of them in 2.1+)** are invisible to standard tooling:
 
 | Image | Size | Source | Problem |
 |-------|------|--------|---------|
-| `lightspeed-core` sidecar (`quay.io/lightspeed-core/lightspeed-stack:0.7.0`) | ~1 GB | [Flavour ConfigMap](https://github.com/redhat-developer/rhdh-operator/tree/main/config/profile/rhdh/flavour-lightspeed) | Not in `spec.relatedImages`, not discoverable by `oc-mirror` |
-| OKP (`registry.redhat.io/offline-knowledge-portal/rhokp-rhel9:1.2.12`) | 10+ GB | [plugin-deps ConfigMap](https://github.com/redhat-developer/rhdh-operator/blob/main/config/profile/rhdh/plugin-deps/okp.yaml) | Not in `spec.relatedImages`, optional feature, huge image |
-| RAG init container (`registry.access.redhat.com/rhdh/rhdh-lightspeed-rag-content-init-rhel9@sha256:...`) | ~200 MB | Flavour ConfigMap | Not in `spec.relatedImages` |
+| `lightspeed-core` sidecar | ~1 GB | [Flavour ConfigMap](https://github.com/redhat-developer/rhdh-operator/tree/main/config/profile/rhdh/flavour-lightspeed) | Not in `spec.relatedImages`, not discoverable by `oc-mirror`, operator code does not read a `RELATED_IMAGE_*` env var for it |
+| OKP deployment | 10+ GB | [plugin-deps ConfigMap](https://github.com/redhat-developer/rhdh-operator/blob/main/config/profile/rhdh/plugin-deps/okp.yaml) | Not in `spec.relatedImages`, not discoverable by `oc-mirror`, operator code does not read a `RELATED_IMAGE_*` env var for it |
 
-These images exist only inside bundle ConfigMaps. Users must manually extract them from the bundle to discover what to mirror — and even after mirroring, there is no runtime resolution mechanism for them (IDMS/ITMS handles the 2 core images via `RELATED_IMAGE_*`, but Lightspeed images bypass that path entirely).
+These images exist only inside bundle ConfigMaps. Users must manually extract them from the bundle to discover what to mirror — and even after mirroring, there is no override mechanism for them. The current [air-gap documentation](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.10/html/interacting_with_red_hat_developer_lightspeed_for_red_hat_developer_hub/configure-to-initialize-the-ai-assistant_interacting-with-developer-lightspeed-for-rhdh#mirror-images-for-air-gapped-environments_configure-to-initialize-the-ai-assistant) acknowledges this gap:
+
+> "The `prepare-restricted-environment.sh` script does **not automatically parse Developer Lightspeed for RHDH images from the bundle manifest**, so mirror these images manually before running the script."
 
 ### Why This Matters to Customers
 
@@ -78,7 +78,7 @@ From [RHDHSUPP-417](https://redhat.atlassian.net/browse/RHDHSUPP-417): customers
 
 ### What Other Red Hat Operators Do
 
-The `spec.relatedImages` + `RELATED_IMAGE_*` pattern is the standard across Red Hat's operator portfolio. Examples:
+The `spec.relatedImages` + `RELATED_IMAGE_*` pattern is the standard across Red Hat's operator portfolio:
 
 - [OpenTelemetry Operator](https://github.com/open-telemetry/opentelemetry-operator/blob/main/bundle/community/manifests/opentelemetry-operator.clusterserviceversion.yaml#L590-L593)
 - [OADP Operator](https://github.com/openshift/oadp-operator/blob/oadp-dev/bundle/manifests/oadp-operator.clusterserviceversion.yaml#L1484-L1519)
@@ -92,44 +92,14 @@ RHDH should follow this established pattern.
 
 ## Decision
 
-### Adopt a dual-layer strategy: declare images in the CSV AND resolve them dynamically via ConfigMap
+### Extend `spec.relatedImages` and honour `RELATED_IMAGE_*` env vars for all operator-managed container images
 
-Both layers are required. They are complementary, not competing:
+This is a single, consistent approach that works on OpenShift (standard and Rosa HCP) and vanilla Kubernetes. No additional runtime resolution mechanism is needed for container images.
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    LAYER 1: DECLARATION                             │
-│           spec.relatedImages + RELATED_IMAGE_* env vars             │
-│                                                                     │
-│  Purpose: Tell tooling WHAT images this operator needs              │
-│  Used by: oc-mirror, Conforma, OLM, auditors                       │
-│  Scope:   All container images the operator may create pods for     │
-│  Where:   CSV in the operator bundle                                │
-│  When:    Build time (bundle generation via `make bundle`)          │
-└─────────────────────────────────────────────────────────────────────┘
-                              +
-┌─────────────────────────────────────────────────────────────────────┐
-│                    LAYER 2: RUNTIME RESOLUTION                      │
-│              ConfigMap-based mirror resolution                      │
-│                                                                     │
-│  Purpose: Tell the operator WHERE to pull images from               │
-│  Used by: Operator reconciliation loop                              │
-│  Scope:   Container images + plugin OCI packages                    │
-│  Where:   User-created ConfigMap in the operator namespace          │
-│  When:    Runtime (every Backstage CR reconciliation)               │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-#### Layer 1: `spec.relatedImages` + `RELATED_IMAGE_*` (Declaration)
-
-**What**: Add Lightspeed images to the CSV's `spec.relatedImages` list and corresponding `RELATED_IMAGE_*` environment variables on the operator deployment. This follows the exact same pattern already used for `backstage` and `postgresql`.
-
-**Images to add**:
+**Images to add to the CSV**:
 
 ```yaml
 # In CSV spec.relatedImages (digest-pinned in downstream builds):
-- image: registry.access.redhat.com/rhdh/rhdh-lightspeed-rag-content-init-rhel9@sha256:...
-  name: lightspeed-rag-init
 - image: registry.redhat.io/lightspeed-core/lightspeed-stack-rhel9@sha256:...
   name: lightspeed-core
 - image: registry.redhat.io/offline-knowledge-portal/rhokp-rhel9@sha256:...
@@ -138,25 +108,13 @@ Both layers are required. They are complementary, not competing:
 
 ```yaml
 # Corresponding env vars on the operator deployment in the CSV:
-- name: RELATED_IMAGE_lightspeed_rag_init
-  value: registry.access.redhat.com/rhdh/rhdh-lightspeed-rag-content-init-rhel9@sha256:...
 - name: RELATED_IMAGE_lightspeed_core
   value: registry.redhat.io/lightspeed-core/lightspeed-stack-rhel9@sha256:...
 - name: RELATED_IMAGE_okp
   value: registry.redhat.io/offline-knowledge-portal/rhokp-rhel9@sha256:...
 ```
 
-**Why this matters**:
-- `oc-mirror` reads `spec.relatedImages` to discover images. Without these entries, it won't copy Lightspeed images to the mirror. ([RHDHSUPP-417](https://redhat.atlassian.net/browse/RHDHSUPP-417))
-- Conforma validation in downstream build pipelines checks that all images in `spec.relatedImages` come from trusted registries. Skipping this means Conforma can't validate Lightspeed images.
-- `make bundle` automatically generates `spec.relatedImages` from `RELATED_IMAGE_*` env vars — this is not manual maintenance.
-
-**OKP image size (10+ GB)**: OKP is optional and large. Listing it in `spec.relatedImages` means `oc-mirror` will copy it even if the user doesn't enable the intelligent-assistant flavour. Two mitigations:
-
-1. **Now**: Document clearly that OKP is optional and can be excluded from `ImageSetConfiguration` if not using the intelligent-assistant flavour with offline knowledge portal.
-2. **Future**: [OCPSTRAT-3755](https://redhat.atlassian.net/browse/OCPSTRAT-3755) — the OCP team is planning to add mandatory vs optional classification for `spec.relatedImages`. Once available, we mark OKP as optional so `oc-mirror` skips it by default.
-
-**Operator code changes**: For each new image, add a `RELATED_IMAGE_*` env var read in the corresponding model code, following the existing pattern in [`deployment.go`](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/deployment.go#L31):
+**Operator code**: For each new image, the controller code reads the `RELATED_IMAGE_*` env var and, if set, uses it instead of the default image from the flavour ConfigMap. This follows the existing pattern in [`deployment.go`](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/deployment.go#L31):
 
 ```go
 const LightspeedCoreImageEnvVar = "RELATED_IMAGE_lightspeed_core"
@@ -167,7 +125,26 @@ if os.Getenv(LightspeedCoreImageEnvVar) != "" {
 }
 ```
 
-**User override (OpenShift)**: Users can override specific images via [Subscription `spec.config.env`](https://github.com/redhat-developer/rhdh-operator/blob/main/config/samples/catalog-subscription-template.yaml) (OLM v0) or equivalent [ClusterExtension](https://github.com/redhat-developer/rhdh-operator/blob/main/config/samples/catalog-cluster-extension-template.yaml) configuration (OLM v1):
+**`make bundle`** automatically generates `spec.relatedImages` from the `RELATED_IMAGE_*` env vars in the CSV deployment spec — no manual maintenance of the `spec.relatedImages` list is required.
+
+### How This Works on Each Platform
+
+#### OpenShift (standard — IDMS works)
+
+This is the default path for most disconnected OpenShift clusters:
+
+1. **Discover**: `oc-mirror` reads `spec.relatedImages` from the CSV automatically
+2. **Mirror**: `oc-mirror` copies all listed images to the customer's mirror registry
+3. **Resolve**: `oc-mirror` creates IDMS/ITMS resources on the cluster. CRI-O transparently redirects image pulls. OLM also rewrites the `RELATED_IMAGE_*` env vars on the operator pod. The operator reads these env vars and uses them when creating Kubernetes objects.
+
+No manual steps beyond running `oc-mirror`. This is exactly how every other Red Hat operator works.
+
+#### OpenShift (Rosa HCP or other clusters where IDMS does not work)
+
+IDMS/ITMS are unavailable on Rosa HCP because the control plane is managed. But users can still use `oc-mirror` to copy images, and then override the operator's env vars:
+
+1. **Discover & Mirror**: Same as above — `oc-mirror` copies images from `spec.relatedImages`
+2. **Resolve**: Instead of IDMS, the user overrides `RELATED_IMAGE_*` env vars via the Subscription (OLM v0) or ClusterExtension (OLM v1):
 
 ```yaml
 apiVersion: operators.coreos.com/v1alpha1
@@ -182,104 +159,54 @@ spec:
   sourceNamespace: openshift-marketplace
   config:
     env:
+      - name: RELATED_IMAGE_backstage
+        value: mirror.company.com/rhdh/rhdh-hub-rhel9@sha256:...
+      - name: RELATED_IMAGE_postgresql
+        value: mirror.company.com/rhdh/postgresql-15@sha256:...
       - name: RELATED_IMAGE_lightspeed_core
         value: mirror.company.com/lightspeed-core/lightspeed-stack-rhel9@sha256:...
+      - name: RELATED_IMAGE_okp
+        value: mirror.company.com/offline-knowledge-portal/rhokp-rhel9@sha256:...
 ```
 
-#### Layer 2: ConfigMap Mirror Resolution (Runtime)
+The operator reads these env vars and uses them in the Kubernetes objects it creates. No IDMS required.
 
-**What**: Extend the operator's existing [`plugin-registry-mirror` ConfigMap](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/dynamic-plugins-mirror.go) mechanism to also rewrite container image references (not just plugin OCI packages) during reconciliation.
+#### Vanilla Kubernetes (no OLM, no IDMS)
 
-**How it works today (plugins only)**:
-1. User creates a ConfigMap named `plugin-registry-mirror` in the operator namespace with source → mirror mappings
-2. ConfigMap is [mounted into the operator pod](https://github.com/redhat-developer/rhdh-operator/blob/main/config/manager/deployment.yaml#L103-L122) at `/plugins-mirror/mirrors.yaml`
-3. Operator [loads the mappings](https://github.com/redhat-developer/rhdh-operator/blob/main/internal/controller/spec_preprocessor.go#L157) during reconciliation preprocessing
-4. Mappings are [applied to plugin OCI package URLs](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/dynamic-plugins.go#L176) — rewriting `registry.access.redhat.com/rhdh/...` → `mirror.company.com/rhdh/...`
+Customers not on OpenShift typically do not want to use `oc`-related tools. The workflow is:
 
-**What changes**: Apply the same rewriting to container image fields in Deployments, StatefulSets, and plugin-deps during `addToModel()`. The mirror logic in [`dynamic-plugins-mirror.go`](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/dynamic-plugins-mirror.go) gets extended to handle plain image references (without the `oci://` prefix used for plugins).
+1. **Discover**: Extract the image list from `spec.relatedImages` in the CSV with a one-liner:
+   ```bash
+   # Extract all related images from the CSV
+   yq eval '.spec.relatedImages[].image' backstage-operator.clusterserviceversion.yaml
+   ```
+2. **Mirror**: Users copy images to their mirror registry using their own tooling (skopeo, crane, or whatever their organisation standardises on). We do not prescribe a specific tool.
+3. **Resolve**: Set `RELATED_IMAGE_*` env vars on the operator deployment, pointing at the mirrored images.
 
-**ConfigMap format** (inspired by IDMS/ITMS but not directly copy-pasteable from an IDMS resource — the structure is similar for familiarity but it is the operator's own format):
+### OKP Image Size (10+ GB)
 
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: plugin-registry-mirror
-  namespace: rhdh-operator
-data:
-  mirrors.yaml: |
-    imageMirrors:
-      - source: registry.access.redhat.com/rhdh
-        mirrors:
-          - mirror.company.com/rhdh
-      - source: quay.io/lightspeed-core
-        mirrors:
-          - mirror.company.com/lightspeed-core
-      - source: registry.redhat.io/offline-knowledge-portal
-        mirrors:
-          - mirror.company.com/okp
-```
+OKP is an optional flavour component, but it is part of the operator's shipped bill of materials. We include it in `spec.relatedImages` by default.
 
-**Why this layer is needed even with `spec.relatedImages`**:
-- `spec.relatedImages` + IDMS/ITMS is the standard resolution path on OpenShift — but it does not work on **Rosa HCP** (hosted control planes block IDMS/ITMS) or **vanilla Kubernetes** (no IDMS/ITMS at all).
-- ConfigMap resolution works **everywhere the operator runs** — OpenShift, Rosa HCP, vanilla Kubernetes, kind, minikube.
-- It's already proven for dynamic plugins (shipped and working). Extending it to containers is a small incremental change.
-- It keeps plugin and container mirroring in one ConfigMap, so users manage one resource for all their mirror mappings.
+**Mitigations**:
+1. **Now**: Document clearly that OKP is optional. Users who don't enable the intelligent-assistant flavour with offline knowledge portal can exclude it from their `ImageSetConfiguration`.
+2. **Future**: [OCPSTRAT-3755](https://redhat.atlassian.net/browse/OCPSTRAT-3755) — the OCP team is planning to add mandatory vs optional classification for `spec.relatedImages`. Once available, we mark OKP as optional so `oc-mirror` skips it by default.
 
-**Important**: Creating or updating the ConfigMap requires an operator pod restart (to mount the updated ConfigMap volume). Subsequent changes to the ConfigMap content require another restart. This is the same lifecycle as `RELATED_IMAGE_*` env vars — neither approach avoids restarts.
+### Why NOT Extend ConfigMap Resolution to Container Images
 
-### How the Two Layers Work Together
+The existing [`plugin-registry-mirror` ConfigMap](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/dynamic-plugins-mirror.go) mechanism works for dynamic plugin OCI packages and remains unchanged. However, we are **not** extending it to container images because:
 
-On a **standard disconnected OpenShift** cluster, the typical flow is:
+1. **It reinvents IDMS**: The ConfigMap approach does the same thing as IDMS (rewrite image references at runtime) but with a different mechanism. Users who understand IDMS would find this confusing — it looks like IDMS but doesn't behave identically, and any gaps between the two create hard-to-debug issues.
+2. **`RELATED_IMAGE_*` already covers all platforms**: The env var override via Subscription/ClusterExtension works on standard OpenShift, Rosa HCP, and vanilla Kubernetes. There is no platform gap that ConfigMap resolution would fill for container images.
+3. **The ConfigMap mechanism for plugins is still dev preview**: As of RHDH 2.1, the plugin mirror resolution via ConfigMap is [dev preview](https://redhat.atlassian.net/browse/RHIDP-15003). Extending it to a broader scope (container images) before it reaches GA would be premature.
+4. **Simpler is better**: One mechanism (`RELATED_IMAGE_*` env vars) is easier to document, test, and support than two parallel mechanisms. Users learn one approach that works everywhere.
 
-```
-1. oc-mirror reads spec.relatedImages from CSV
-   → Copies all listed images to mirror registry
+> **Note**: The existing ConfigMap-based mirror resolution for dynamic plugin OCI packages is a separate concern and is not affected by this decision. Plugins are pulled inside containers by skopeo (not by the kubelet), so IDMS does not apply to them — the ConfigMap mechanism is the correct approach for plugins. This ADR is about container images only.
 
-2. oc-mirror creates IDMS/ITMS resources on the cluster
-   → CRI-O transparently redirects image pulls to mirror
+### Orchestrator
 
-3. OLM installs operator with RELATED_IMAGE_* env vars
-   → Operator reads env vars, uses them for backstage + postgresql
-   → For Lightspeed images (new): same pattern, operator reads
-     RELATED_IMAGE_lightspeed_core etc.
+Orchestrator is [only supported on OpenShift](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.10/html/orchestrator_in_red_hat_developer_hub). It uses plugin OCI packages (not additional container images managed by the RHDH operator). The OSL (OpenShift Serverless Logic) operators have their own `spec.relatedImages` and their own air-gap process — it is not RHDH's responsibility to list OSL operator images in our bundle.
 
-4. (Optional) User creates plugin-registry-mirror ConfigMap
-   → Operator also applies ConfigMap resolution during reconciliation
-   → This is additive — both mechanisms coexist safely
-```
-
-On **Rosa HCP** or **vanilla Kubernetes** (no IDMS/ITMS available):
-
-```
-1. User discovers images from spec.relatedImages (or bundle inspection)
-   → Uses skopeo copy to mirror images manually
-
-2. User creates plugin-registry-mirror ConfigMap
-   → Maps source registries to mirror registry
-
-3. Operator reads ConfigMap at startup, applies mappings
-   → Rewrites all image references during reconciliation
-   → Pods see already-resolved mirror paths
-```
-
-### Architectural Approach
-
-**Precedence**: When both mechanisms are configured, `RELATED_IMAGE_*` env vars take precedence for the images they cover (backstage, postgresql, and now the Lightspeed images). ConfigMap resolution applies to any remaining image references that env vars don't cover. This matches the existing behavior where the operator checks `os.Getenv()` first, then falls back to the image defined in the flavour ConfigMap.
-
-**When resolution happens**: During reconciliation, after flavour manifests are merged but before Kubernetes objects are applied to the cluster.
-
-**Where in the code**: In each object's `addToModel()` method — the same place the operator already applies `RELATED_IMAGE_*` substitution for core images.
-
-**Scope of ConfigMap resolution**:
-- Container images in Deployments (backstage, lightspeed-core sidecar, init containers)
-- Container images in StatefulSets (postgresql)
-- Container images in plugin-deps (OKP)
-- Plugin OCI packages (already working, no change needed)
-
-**Out of scope**:
-- npm packages, HTTP URLs (not container images)
-- Orchestrator on vanilla Kubernetes documentation (Orchestrator is [currently only supported on OpenShift](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.10/html/orchestrator_in_red_hat_developer_hub))
+The current [Orchestrator air-gap documentation](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.10/html/orchestrator_in_red_hat_developer_hub/install-orchestrator-plugin-in-an-air-gapped-environment-with-the-operator_orchestrator-in-rhdh) can remain as-is for now. There is a known gap where IDMS does not apply to plugin OCI packages (because they are pulled inside containers, not by the kubelet), but the ConfigMap mirror resolution for plugins is still dev preview in 2.1 and should not be documented as a production workaround until it reaches GA. This can be addressed as a follow-up.
 
 ---
 
@@ -287,157 +214,80 @@ On **Rosa HCP** or **vanilla Kubernetes** (no IDMS/ITMS available):
 
 ### Operator Code Changes ([rhdh-operator](https://github.com/redhat-developer/rhdh-operator))
 
-#### Layer 1: `spec.relatedImages` + `RELATED_IMAGE_*`
-
 | What | Files | Change | Validation |
 |------|-------|--------|------------|
-| **Add env vars to CSV** | `bundle/rhdh/manifests/backstage-operator.clusterserviceversion.yaml` | Add `RELATED_IMAGE_lightspeed_core`, `RELATED_IMAGE_lightspeed_rag_init`, `RELATED_IMAGE_okp` env vars to operator deployment spec (same section as existing [`RELATED_IMAGE_backstage`](https://github.com/redhat-developer/rhdh-operator/blob/main/bundle/rhdh/manifests/backstage-operator.clusterserviceversion.yaml#L311-L316)) | `make bundle` regenerates `spec.relatedImages` from env vars |
-| **Add env var reads in operator code** | Flavour model code (where Lightspeed sidecar, RAG init, OKP containers are configured) | Add `os.Getenv("RELATED_IMAGE_lightspeed_core")` checks, following the pattern in [`deployment.go:31`](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/deployment.go#L31) | Unit test: env var set → image substituted; env var unset → flavour default used |
-| **Bundle generation** | `Makefile` / `make bundle` target | No manual change — `make bundle` automatically reads `RELATED_IMAGE_*` env vars from the CSV deployment spec and populates `spec.relatedImages` | Verify `spec.relatedImages` contains all 5 images after `make bundle` |
+| **Add env vars to CSV** | `bundle/rhdh/manifests/backstage-operator.clusterserviceversion.yaml` | Add `RELATED_IMAGE_lightspeed_core` and `RELATED_IMAGE_okp` env vars to operator deployment spec (same section as existing [`RELATED_IMAGE_backstage`](https://github.com/redhat-developer/rhdh-operator/blob/main/bundle/rhdh/manifests/backstage-operator.clusterserviceversion.yaml#L311-L316)) | `make bundle` regenerates `spec.relatedImages` with all 4 images |
+| **Add env var reads in controller code** | Flavour model code (where Lightspeed sidecar and OKP containers are configured) | Add `os.Getenv("RELATED_IMAGE_lightspeed_core")` and `os.Getenv("RELATED_IMAGE_okp")` checks, following the pattern in [`deployment.go:31`](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/deployment.go#L31) | Unit test: env var set → image substituted; env var unset → flavour default used |
+| **Bundle generation** | `Makefile` / `make bundle` target | No manual change — `make bundle` reads `RELATED_IMAGE_*` env vars from the CSV deployment spec and populates `spec.relatedImages` | Verify `spec.relatedImages` contains all 4 images after `make bundle` |
+| **E2E tests** | `tests/e2e/` | Update disconnected E2E test to verify all images (including Lightspeed) are pulled from mirror when `RELATED_IMAGE_*` env vars are set | E2E test passes with no external registry access |
 
-#### Layer 2: ConfigMap Mirror Resolution
+### Script Deprecation ([rhdh-operator](https://github.com/redhat-developer/rhdh-operator))
 
-| What | Files | Change | Validation |
-|------|-------|--------|------------|
-| **Extend mirror logic** | [`pkg/model/dynamic-plugins-mirror.go`](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/dynamic-plugins-mirror.go) | Extend `ApplyMirror()` to handle both `oci://`-prefixed refs (plugins) and plain image refs (containers). Currently it only matches `oci://` prefixed strings. | Unit tests: mirror `quay.io/lightspeed-core/lightspeed-stack:0.7.0` → `mirror.company.com/lightspeed-core/lightspeed-stack:0.7.0` |
-| **Apply to Deployments** | [`pkg/model/deployment.go:82`](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/deployment.go#L82) | Add `applyMirrorsToAllContainers()` call in `addToModel()`, after the existing `RELATED_IMAGE_backstage` override | Lightspeed sidecar + init containers use mirrored registry |
-| **Apply to StatefulSets** | [`pkg/model/db-statefulset.go`](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/db-statefulset.go) | Add `applyMirrorsToAllContainers()` call in `addToModel()`, after the existing `RELATED_IMAGE_postgresql` override | PostgreSQL uses mirrored registry |
-| **Apply to plugin-deps** | [`internal/controller/plugin_dependencies.go`](https://github.com/redhat-developer/rhdh-operator) | Verify OKP deployment flows through the same reconciliation path and receives mirror substitution | OKP deployment uses mirrored registry |
-| **Unit tests** | `pkg/model/dynamic-plugins-mirror_test.go` | Add test cases for container image mirror resolution — tags, digests, registry ports, substring matching edge cases | Full coverage for boundary cases |
-| **Integration tests** | `tests/e2e/` | Add air-gap scenario: deploy Backstage with intelligent-assistant, verify all images pulled from mirror | E2E test passes with no external registry access |
+| What | Timeline | Detail |
+|------|----------|--------|
+| **Update `prepare-restricted-environment.sh`** | 2.2 | Add `spec.relatedImages` as primary image source (backward-compatible fallback to old CSV parsing for older bundles). Add deprecation notice. |
+| **Deprecation notice** | 2.2 release notes | Note that the script is deprecated and will be removed in 2.3. Document the manual `spec.relatedImages`-based workflow as the replacement. |
+| **Remove from docs and repo** | 2.3 | Remove the script from customer-facing documentation and the operator repository. Optionally migrate to [rhdh-core](https://github.com/redhat-developer/rhdh) for internal E2E testing and Helm chart air-gap testing. |
+| **`mirror-plugins.sh`** | No change | Remains available for plugin OCI packages. Separate concern from container images. |
 
 ### Downstream Impact
 
-#### What changes in the bundle
-
-Adding images to `spec.relatedImages` means these images now appear in **two places** in the bundle:
-
-- **ConfigMaps** (flavour-intelligent-assistant, plugin-deps-okp) — already there today
-- **CSV `spec.relatedImages`** — new
-
-#### Required downstream updates
-
 | Script | What needs to change | Why |
 |--------|---------------------|-----|
-| [`sync-midstream.sh`](https://github.com/redhat-developer/rhdh-operator) | Add staleness checks for the new `spec.relatedImages` entries (`lightspeed-core`, `okp`, `lightspeed-rag-init`), following the same pattern used for `postgresql` | Without this, when Red Hat releases new versions of these images, the ConfigMaps will update but the CSV entries will go stale. `oc-mirror` reads from `spec.relatedImages`, so stale entries break the air-gap workflow. |
-| [`replaceUpstreamImages.sh`](https://github.com/redhat-developer/rhdh-operator) | **No changes needed** — already handles digest pinning for all image references in the CSV | Existing logic covers new entries automatically |
+| `sync-midstream.sh` | Add staleness checks for the 2 new `spec.relatedImages` entries (`lightspeed-core`, `okp`), following the same pattern used for `postgresql` | Without this, when Red Hat releases new versions of these images, the ConfigMaps will update but the CSV entries will go stale. `oc-mirror` reads from `spec.relatedImages`, so stale entries break the air-gap workflow. |
+| `replaceUpstreamImages.sh` | **No changes needed** — already handles digest pinning for all image references in the CSV | Existing logic covers new entries automatically |
 
-#### Conforma validation
-
-Adding images to `spec.relatedImages` enables [Conforma](https://redhat.atlassian.net/browse/RHDHSUPP-417) downstream pipeline validation to verify that Lightspeed images come from trusted registries — the same validation already applied to `backstage` and `postgresql`. This is a compliance improvement.
+**Conforma validation**: Adding images to `spec.relatedImages` enables [Conforma](https://redhat.atlassian.net/browse/RHDHSUPP-417) downstream pipeline validation to verify that Lightspeed images come from trusted registries — the same validation already applied to `backstage` and `postgresql`.
 
 ### Documentation Changes ([red-hat-developers-documentation-rhdh](https://github.com/redhat-developer/red-hat-developers-documentation-rhdh))
 
-Documentation follows a **manual-first** pattern: show clear, auditable manual steps using standard tooling (`yq`, `skopeo`, `oc-mirror`), then link to helper scripts (`prepare-restricted-environment.sh`, `mirror-plugins.sh`) as optional automation. Enterprise customers often have security policies against running external scripts — they need transparent steps they can audit and control.
-
-#### Document Two Resolution Paths
-
-Air-gap documentation must explain both resolution paths so users can choose based on their platform:
-
-**Path A: Standard OpenShift (IDMS/ITMS available)**
-
-This is the default path for most disconnected OpenShift clusters. It uses the standard Red Hat operator pattern:
-
-1. **Discover images**: `oc-mirror` reads `spec.relatedImages` from the operator's CSV automatically — no manual image hunting needed
-2. **Mirror images**: `oc-mirror` copies all listed images to the customer's mirror registry and creates IDMS/ITMS resources on the cluster
-3. **Resolution happens automatically**: IDMS/ITMS tells CRI-O to redirect all pulls from `registry.redhat.io/...` to `mirror.company.com/...`. The operator's `RELATED_IMAGE_*` env vars are also rewritten by OLM. No ConfigMap needed.
-
-```bash
-# Standard oc-mirror workflow — same as any other RH operator
-oc-mirror --config imageset-config.yaml docker://mirror.company.com
-```
-
-**Path B: Rosa HCP / Vanilla Kubernetes / Users wanting dynamic control (no IDMS/ITMS)**
-
-This path uses the ConfigMap mechanism for runtime resolution:
-
-1. **Discover images**: Extract from `spec.relatedImages` in CSV (same source of truth), or inspect bundle ConfigMaps
-2. **Mirror images**: Use `skopeo copy` to copy images to mirror registry
-3. **Create ConfigMap**: Create `plugin-registry-mirror` ConfigMap with source → mirror mappings
-4. **Restart operator**: Restart the operator pod to mount the new ConfigMap
-5. **Resolution happens at reconciliation**: Operator reads ConfigMap, rewrites image references in all Kubernetes objects before applying them
-
-```bash
-# Mirror images manually
-skopeo copy \
-  docker://quay.io/lightspeed-core/lightspeed-stack:0.7.0 \
-  docker://mirror.company.com/lightspeed-core/lightspeed-stack:0.7.0
-
-# Create ConfigMap
-kubectl apply -f plugin-registry-mirror.yaml
-
-# Restart operator to mount ConfigMap
-kubectl rollout restart deployment rhdh-operator -n rhdh-operator
-```
-
-#### Documentation Updates by Document
-
 | Document | Current State | What Changes |
 |----------|---------------|--------------|
-| **[Install RHDH in air-gap (Operator)](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.10/html-single/installing_red_hat_developer_hub_in_an_air-gapped_environment/index#install-rhdh-in-an-air-gapped-environment-with-the-operator_installing-rhdh-in-an-air-gapped-environment)** | Only shows `prepare-restricted-environment.sh` script | Rewrite to manual-first: show `oc-mirror` reading from `spec.relatedImages` (Path A). Add Path B with ConfigMap for Rosa HCP / vanilla K8s. Link to script as optional automation at the end. |
-| **[Install RHDH + Intelligent Assistant air-gap](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.10/html/interacting_with_red_hat_developer_lightspeed_for_red_hat_developer_hub/configure-to-initialize-the-ai-assistant_interacting-with-developer-lightspeed-for-rhdh#mirror-images-for-air-gapped-environments_configure-to-initialize-the-ai-assistant)** | Says "mirror these images manually" because script doesn't parse them | Remove manual extraction note (images now in `spec.relatedImages`). Show both paths. Note: OKP is optional and 10+ GB — only mirror if using offline knowledge portal. |
-| **[Install Orchestrator air-gap (Operator)](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.10/html/orchestrator_in_red_hat_developer_hub/install-orchestrator-plugin-in-an-air-gapped-environment-with-the-operator_orchestrator-in-rhdh)** | Shows OpenShift-only with oc-mirror | Clarify: Orchestrator uses plugin OCI packages (not container images). Plugin packages already supported by existing ConfigMap mirror resolution. No container image changes needed for Orchestrator. |
-| **Operator air-gap reference (`.rhdh/docs/airgap.adoc`)** | Incomplete | Add ConfigMap format reference. Document Subscription `spec.config.env` override for `RELATED_IMAGE_*`. Show both Path A and Path B side by side. |
-| **[Install RHDH + Orchestrator air-gap (Helm)](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.10/html/orchestrator_in_red_hat_developer_hub/install-orchestrator-plugin-in-an-air-gapped-environment-with-the-helm-chart_orchestrator-in-rhdh)** | OpenShift with oc-mirror only | Orchestrator is currently [only supported on OpenShift](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.10/html/orchestrator_in_red_hat_developer_hub). No vanilla K8s procedure needed at this time. |
-
-#### Documentation Pattern for Each Doc
-
-Every air-gap document should follow this structure:
-
-1. **Prerequisites** — tools needed: `yq`, `skopeo` or `oc-mirror`, `kubectl` or `oc`
-2. **Path A (Standard OpenShift)** — `oc-mirror` reads `spec.relatedImages`, creates IDMS/ITMS, done
-3. **Path B (Rosa HCP / Vanilla K8s)** — `skopeo copy` + ConfigMap creation + operator restart
-4. **Verification** — how to confirm images are pulling from the mirror
-5. **Optional automation** — link to `prepare-restricted-environment.sh` or `mirror-plugins.sh`
-
-### Scripts / Tooling Changes ([rhdh-operator](https://github.com/redhat-developer/rhdh-operator))
-
-| Script | What Changes | Why |
-|--------|--------------|-----|
-| [`prepare-restricted-environment.sh`](https://github.com/redhat-developer/rhdh-operator/blob/main/.rhdh/scripts/prepare-restricted-environment.sh) | Update to read from `spec.relatedImages` as primary image source, with fallback to old CSV parsing for backward compatibility with older bundles | Once images are in `spec.relatedImages`, the script can discover them automatically instead of requiring manual extraction |
-| [`mirror-plugins.sh`](https://github.com/redhat-developer/rhdh-operator/blob/main/.rhdh/scripts/mirror-plugins.sh) | **No changes needed** — already handles plugin OCI packages | Plugins are a separate concern from container images |
+| **[Install RHDH in air-gap (Operator)](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.10/html-single/installing_red_hat_developer_hub_in_an_air-gapped_environment/index#install-rhdh-in-an-air-gapped-environment-with-the-operator_installing-rhdh-in-an-air-gapped-environment)** | Only shows `prepare-restricted-environment.sh` script | Rewrite to show: (1) OpenShift — `oc-mirror` reads `spec.relatedImages`, creates IDMS, done. (2) Where IDMS doesn't work — override `RELATED_IMAGE_*` via Subscription/ClusterExtension. (3) Vanilla K8s — extract images from `spec.relatedImages`, mirror, set env vars. Add deprecation notice for script. |
+| **[Install RHDH + Intelligent Assistant air-gap](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.10/html/interacting_with_red_hat_developer_lightspeed_for_red_hat_developer_hub/configure-to-initialize-the-ai-assistant_interacting-with-developer-lightspeed-for-rhdh#mirror-images-for-air-gapped-environments_configure-to-initialize-the-ai-assistant)** | Says "mirror these images manually" | Remove manual extraction note — images are now in `spec.relatedImages` and discovered automatically by `oc-mirror`. Document that OKP is optional (10+ GB) — only needed if enabling offline knowledge portal. |
+| **[Orchestrator air-gap (Operator)](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.10/html/orchestrator_in_red_hat_developer_hub/install-orchestrator-plugin-in-an-air-gapped-environment-with-the-operator_orchestrator-in-rhdh)** | OpenShift with oc-mirror | Leave as-is for now. Plugin OCI packages are a separate concern (IDMS doesn't apply to them). Follow-up when ConfigMap plugin mirror resolution reaches GA. |
+| **Operator air-gap reference (`.rhdh/docs/airgap.adoc`)** | Incomplete | Document the Subscription/ClusterExtension `spec.config.env` override pattern with examples for all `RELATED_IMAGE_*` env vars. |
 
 ### Helm Chart ([rhdh-chart](https://github.com/redhat-developer/rhdh-chart))
 
-**No code or chart changes needed.** Helm users already use [`values.yaml`](https://github.com/redhat-developer/rhdh-chart/blob/main/charts/redhat-developer-hub/values.yaml) as the image inventory source. Existing documentation instructs users to run `helm show values` to discover images. The ConfigMap mirror resolution mechanism is operator-only and does not apply to Helm installs.
+**No changes needed.** Helm users already use [`values.yaml`](https://github.com/redhat-developer/rhdh-chart/blob/main/charts/redhat-developer-hub/values.yaml) as the image inventory source. Existing documentation instructs users to run `helm show values` to discover images.
 
 ### Summary of Changes by Repository
 
 | Repository | Bundle/CSV | Operator Code | Scripts | Documentation |
 |------------|------------|---------------|---------|---------------|
-| **[rhdh-operator](https://github.com/redhat-developer/rhdh-operator)** | ✏️ Add 3 images to `spec.relatedImages` + `RELATED_IMAGE_*` env vars | ✏️ Add env var reads for new images + extend ConfigMap mirror resolution to containers | ✏️ Update `prepare-restricted-environment.sh` to read from `spec.relatedImages` | ✏️ Rewrite air-gap docs: both paths, manual-first |
-| **[rhdh-chart](https://github.com/redhat-developer/rhdh-chart)** | N/A | N/A | N/A | ✅ No changes needed |
-| **[rhdh-docs](https://github.com/redhat-developer/red-hat-developers-documentation-rhdh)** | N/A | N/A | N/A | ✏️ Major rewrite: both paths, manual-first, remove "mirror manually" notes |
+| **[rhdh-operator](https://github.com/redhat-developer/rhdh-operator)** | ✏️ Add 2 images to `spec.relatedImages` + `RELATED_IMAGE_*` env vars | ✏️ Add env var reads for `lightspeed_core` and `okp` in controller code | ✏️ Update script to read from `spec.relatedImages` + add deprecation notice (2.2). Remove in 2.3. | ✏️ Rewrite air-gap docs with `spec.relatedImages`-based workflow |
+| **[rhdh-chart](https://github.com/redhat-developer/rhdh-chart)** | N/A | N/A | N/A | ✅ No changes |
+| **[rhdh-docs](https://github.com/redhat-developer/red-hat-developers-documentation-rhdh)** | N/A | N/A | N/A | ✏️ Rewrite air-gap docs: remove "mirror manually" notes, add Subscription override examples, add script deprecation notice |
 
 ---
 
 ## Alternatives Considered
 
-### Alternative 1: ConfigMap Mirror Resolution Only (no `spec.relatedImages`)
+### Alternative 1: ConfigMap Mirror Resolution for Container Images
 
-**Approach**: Rely solely on ConfigMap-based runtime resolution. Do not add images to `spec.relatedImages` in the CSV.
+**Approach**: Extend the existing `plugin-registry-mirror` ConfigMap mechanism (currently used for plugin OCI packages) to also rewrite container image references during reconciliation.
 
-This was the approach in the [previous revision of this ADR](https://github.com/redhat-developer/rhdh-adr/pull/29).
-
-**Rejected because**:
-1. **Breaks `oc-mirror`**: Customers with standardised disconnected OCP pipelines expect `oc-mirror` to discover all images from `spec.relatedImages`. Without these entries, RHDH is the only Red Hat operator that requires manual image discovery. ([RHDHSUPP-417](https://redhat.atlassian.net/browse/RHDHSUPP-417))
-2. **Breaks Conforma validation**: Downstream build pipelines use Conforma to verify that all images in `spec.relatedImages` come from trusted registries. Images not in `spec.relatedImages` skip this check.
-3. **Non-standard**: Every other Red Hat operator ([OpenTelemetry](https://github.com/open-telemetry/opentelemetry-operator/blob/main/bundle/community/manifests/opentelemetry-operator.clusterserviceversion.yaml#L590-L593), [OADP](https://github.com/openshift/oadp-operator/blob/oadp-dev/bundle/manifests/oadp-operator.clusterserviceversion.yaml#L1484-L1519), [Quay](https://github.com/quay/quay-operator/blob/master/bundle/manifests/quay-operator.clusterserviceversion.yaml#L153-L170), [DevWorkspace](https://github.com/devfile/devworkspace-operator/blob/main/deploy/bundle/manifests/devworkspace-operator.clusterserviceversion.yaml#L410-L445), [Sandboxed Containers](https://github.com/openshift/sandboxed-containers-operator/blob/devel/bundle/manifests/sandboxed-containers-operator.clusterserviceversion.yaml#L420-L437)) uses `spec.relatedImages`. RHDH should not be the exception.
-
-### Alternative 2: `spec.relatedImages` Only (no ConfigMap resolution)
-
-**Approach**: Add images to `spec.relatedImages` and rely entirely on IDMS/ITMS + `RELATED_IMAGE_*` env vars for resolution.
-
-This was the approach in the [first version of this ADR](https://github.com/redhat-developer/rhdh-adr/pull/29/commits/d89a24c).
+This was the approach in [earlier revisions of this ADR](https://github.com/redhat-developer/rhdh-adr/pull/29).
 
 **Rejected because**:
-1. **Does not work on Rosa HCP**: Hosted control planes block IDMS/ITMS. Users on Rosa HCP have no resolution path.
-2. **Does not work on vanilla Kubernetes**: No IDMS/ITMS, no OLM — users need an operator-level mechanism.
-3. **Inconsistent with plugins**: Dynamic plugin packages already use ConfigMap resolution. Having two different mechanisms (IDMS/ITMS for containers, ConfigMap for plugins) creates user confusion. The ConfigMap should be the unified mechanism for runtime resolution.
+1. **Reinvents IDMS**: The ConfigMap approach replicates what IDMS already does (rewrite image references at runtime) but with a different, operator-specific mechanism. Users familiar with IDMS would find this confusing, and behavioural differences between the two create hard-to-debug issues.
+2. **Unnecessary**: The `RELATED_IMAGE_*` env var override via Subscription/ClusterExtension already works on all platforms — standard OpenShift, Rosa HCP, and vanilla Kubernetes. There is no gap that ConfigMap resolution would fill for container images.
+3. **Still dev preview**: The ConfigMap mechanism for plugins is [dev preview in 2.1](https://redhat.atlassian.net/browse/RHIDP-15003). Extending it to container images before GA would be premature.
+4. **Added complexity**: Two parallel resolution mechanisms (env vars and ConfigMap) makes documentation, testing, and support harder. One mechanism is simpler.
+
+### Alternative 2: ConfigMap Mirror Resolution Only (no `spec.relatedImages`)
+
+**Approach**: Rely solely on ConfigMap-based runtime resolution. Do not add images to `spec.relatedImages`.
+
+**Rejected because**:
+1. **Breaks `oc-mirror`**: Customers expect `oc-mirror` to discover all images from `spec.relatedImages`. ([RHDHSUPP-417](https://redhat.atlassian.net/browse/RHDHSUPP-417))
+2. **Breaks Conforma validation**: Downstream pipelines can't verify images not listed in `spec.relatedImages`.
+3. **Non-standard**: Every other Red Hat operator uses `spec.relatedImages`. RHDH should not be the exception.
 
 ### Alternative 3: Document-Only Fixes
 
-**Approach**: Leave code unchanged. Extend documentation with manual image extraction and manual deployment patching for every air-gapped install.
+**Approach**: Leave code unchanged. Add manual image extraction steps to documentation.
 
 **Rejected because**:
 - Does not scale with flavours and plugin-deps
@@ -451,28 +301,25 @@ This was the approach in the [first version of this ADR](https://github.com/redh
 
 ### Positive
 
-✅ **Standard RH operator compliance**: `spec.relatedImages` + `RELATED_IMAGE_*` follows the pattern used by all other Red Hat operators — `oc-mirror` works out of the box  
-✅ **Conforma validation**: Downstream pipelines can verify all operator images come from trusted registries  
-✅ **Platform-agnostic resolution**: ConfigMap mechanism works everywhere — OpenShift, Rosa HCP, vanilla Kubernetes  
-✅ **Single ConfigMap**: Users manage one `plugin-registry-mirror` ConfigMap for plugins AND container images  
-✅ **Optional feature support**: Users only mirror images for features they enable (document OKP as optional)  
-✅ **Backward compatible**: Existing `RELATED_IMAGE_*` mechanism for core images continues to work unchanged  
+✅ **Standard RH operator compliance**: `spec.relatedImages` + `RELATED_IMAGE_*` follows the pattern used by all other Red Hat operators  
+✅ **`oc-mirror` works out of the box**: Customers' existing disconnected workflows discover all RHDH images automatically  
+✅ **Conforma validation**: Downstream pipelines verify all operator images come from trusted registries  
+✅ **Single mechanism**: One approach (`RELATED_IMAGE_*` env vars) works on OpenShift, Rosa HCP, and vanilla K8s — no parallel mechanisms to learn  
+✅ **Backward compatible**: Existing core image handling (`backstage`, `postgresql`) continues unchanged  
 ✅ **Future-proofed**: [OCPSTRAT-3755](https://redhat.atlassian.net/browse/OCPSTRAT-3755) will add mandatory/optional classification to `spec.relatedImages`, solving the OKP size concern natively  
-✅ **Transparent documentation**: Manual-first approach with both paths documented; scripts as optional helpers  
+✅ **Script deprecation**: Simplifies maintenance — the script was not widely used by customers and added support burden  
 
 ### Negative
 
-❌ **CSV maintenance**: Adding images to `spec.relatedImages` increases the bundle maintenance surface — new env vars, digest pinning, staleness checks  
-❌ **Two mechanisms to understand**: Users on standard OpenShift don't need to know about ConfigMap resolution, but documentation must cover both paths clearly  
-❌ **OKP in `spec.relatedImages` is large**: Until [OCPSTRAT-3755](https://redhat.atlassian.net/browse/OCPSTRAT-3755) lands, `oc-mirror` will copy the 10+ GB OKP image even if unused (mitigated by documentation + `ImageSetConfiguration` exclusion)  
-❌ **Downstream work**: `sync-midstream.sh` needs updates to check staleness of new `spec.relatedImages` entries  
-❌ **ConfigMap requires operator restart**: Creating or updating the `plugin-registry-mirror` ConfigMap requires restarting the operator pod to mount the new volume content  
+❌ **CSV maintenance**: New env vars, digest pinning, staleness checks in `sync-midstream.sh`  
+❌ **OKP image is large**: Until [OCPSTRAT-3755](https://redhat.atlassian.net/browse/OCPSTRAT-3755) lands, `oc-mirror` copies the 10+ GB OKP image even if unused (mitigated by documentation + `ImageSetConfiguration` exclusion)  
+❌ **Downstream work**: `sync-midstream.sh` needs updates for new `spec.relatedImages` entries  
+❌ **E2E test updates**: Disconnected E2E tests need to cover the new images and env var overrides  
 
 ### Neutral
 
-⚖️ **`RELATED_IMAGE_*` env vars remain the primary override**: On standard OpenShift, IDMS/ITMS + env vars handle resolution. ConfigMap is additive, not replacing.  
-⚖️ **Operator restart for ConfigMap changes**: Same lifecycle as env var changes — neither approach avoids restarts.  
-⚖️ **Dynamic plugins unchanged**: Plugin OCI package mirroring via ConfigMap already works. This ADR extends the mechanism to containers but doesn't change the plugin path.  
+⚖️ **Plugin OCI packages remain separate**: The existing ConfigMap-based mirror resolution for plugins is unaffected. Plugins and container images use different mechanisms — this is correct because they have different pull paths (skopeo inside a container vs kubelet).  
+⚖️ **Script deprecation is phased**: 2.2 deprecation → 2.3 removal gives users time to migrate.  
 
 ---
 
@@ -484,12 +331,10 @@ This was the approach in the [first version of this ADR](https://github.com/redh
 - [`RELATED_IMAGE_*` env vars in CSV](https://github.com/redhat-developer/rhdh-operator/blob/main/bundle/rhdh/manifests/backstage-operator.clusterserviceversion.yaml#L311-L316) — current backstage + postgresql
 - [`deployment.go` — `RELATED_IMAGE_backstage` read](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/deployment.go#L31) — pattern to follow for new images
 - [`db-statefulset.go` — `RELATED_IMAGE_postgresql` read](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/db-statefulset.go#L17)
-- [`dynamic-plugins-mirror.go` — ConfigMap mirror logic](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/dynamic-plugins-mirror.go) — extend for containers
-- [`dynamic-plugins.go:176` — where mirrors apply to plugins](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/dynamic-plugins.go#L176)
-- [`spec_preprocessor.go:157` — where mirrors are loaded](https://github.com/redhat-developer/rhdh-operator/blob/main/internal/controller/spec_preprocessor.go#L157)
-- [`deployment.yaml` — ConfigMap volume mount](https://github.com/redhat-developer/rhdh-operator/blob/main/config/manager/deployment.yaml#L103-L122)
+- [`dynamic-plugins-mirror.go` — ConfigMap mirror logic for plugins](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/dynamic-plugins-mirror.go) — not extended for container images
 - [Subscription sample](https://github.com/redhat-developer/rhdh-operator/blob/main/config/samples/catalog-subscription-template.yaml) — user override for env vars
 - [ClusterExtension sample](https://github.com/redhat-developer/rhdh-operator/blob/main/config/samples/catalog-cluster-extension-template.yaml) — OLM v1 equivalent
+- [`prepare-restricted-environment.sh`](https://github.com/redhat-developer/rhdh-operator/blob/main/.rhdh/scripts/prepare-restricted-environment.sh) — script to be deprecated
 
 ### Other Red Hat Operators (spec.relatedImages examples)
 
@@ -501,10 +346,10 @@ This was the approach in the [first version of this ADR](https://github.com/redh
 
 ### Jira / Upstream Trackers
 
-- [RHDHSUPP-417](https://redhat.atlassian.net/browse/RHDHSUPP-417) — Customer expectation: `oc-mirror` should work for RHDH like all other RH operators
 - [RHDHPLAN-1887](https://redhat.atlassian.net/browse/RHDHPLAN-1887) — Centralize air-gap image inventory
-- [RHIDP-15003](https://redhat.atlassian.net/browse/RHIDP-15003) — ConfigMap-based mirror resolution for dynamic plugins (already implemented)
-- [OCPSTRAT-3755](https://redhat.atlassian.net/browse/OCPSTRAT-3755) — OCP initiative to add mandatory/optional classification to `spec.relatedImages` (future — will solve OKP size concern natively)
+- [RHDHSUPP-417](https://redhat.atlassian.net/browse/RHDHSUPP-417) — Customer expectation: `oc-mirror` should work for RHDH like all other RH operators
+- [RHIDP-15003](https://redhat.atlassian.net/browse/RHIDP-15003) — ConfigMap-based mirror resolution for dynamic plugins (dev preview, not extended to containers)
+- [OCPSTRAT-3755](https://redhat.atlassian.net/browse/OCPSTRAT-3755) — OCP initiative to add mandatory/optional classification to `spec.relatedImages`
 
 ### OpenShift Documentation
 
@@ -521,5 +366,6 @@ This was the approach in the [first version of this ADR](https://github.com/redh
 ### PR History
 
 - [PR #29 — ADR-009](https://github.com/redhat-developer/rhdh-adr/pull/29) — this ADR's review discussion
-- [gazarenkov's review](https://github.com/redhat-developer/rhdh-adr/pull/29#pullrequestreview-5529579002) — "mirror configuration should be a first class citizen... extend ConfigMap approach"
-- [rm3l's review](https://github.com/redhat-developer/rhdh-adr/pull/29#pullrequestreview-5701582791) — "we should also provide a supported path for OCP users using oc-mirror... the two approaches are not mutually exclusive"
+- [gazarenkov's review](https://github.com/redhat-developer/rhdh-adr/pull/29#pullrequestreview-5529579002) — initial ConfigMap suggestion
+- [rm3l's review](https://github.com/redhat-developer/rhdh-adr/pull/29#pullrequestreview-5701582791) — "provide a supported path for OCP users using oc-mirror"
+- RHDH Install Cabal meeting (Nov 2, 2026) — team aligned on `spec.relatedImages` only, ConfigMap extension to containers dropped
