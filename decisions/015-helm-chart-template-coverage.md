@@ -13,24 +13,22 @@
 **Who is impacted**:
 - Chart authors, who need to see uncovered template branches on PRs
 - QE / Install, who own Helm quality signals
-- Anyone comparing chart coverage to operator Codecov coverage
 
 **Constraints**:
 - Do not rewrite charts or replace chart-testing
-- OSS, pinable, Apache-2.0-compatible
+- OSS, pinable
 - Codecov-compatible report (Cobertura XML). Go `cover.out` is not required
-- First numbers will be low (local baseline: rhdh ~28%, must-gather ~61%, orchestrator-infra ~84%). Coverage must not become a merge gate on day one
-
-Spike notes: [Google doc](https://docs.google.com/document/d/1iMGzEt_tpxikwQ01hFQphLoEBCWeHrXTlTR1g00NGhg/edit). Implementation: [RHIDP-18349](https://redhat.atlassian.net/browse/RHIDP-18349), [rhdh-chart#698](https://github.com/redhat-developer/rhdh-chart/pull/698).
+- Coverage must not become a merge gate on day one
 
 ## Decision
 
 Use **[chart-coverage](https://github.com/jCOTINEAU/chart-coverage)** (`helm-coverage.sh`) to measure Helm **template branch** coverage from existing `ci/` values, and upload Cobertura XML to **Codecov** as an informational check.
 
 **Implementation approach**:
-- Vendor `helm-coverage.sh` in `rhdh-chart` (Apache-2.0), pinned to a SHA. Do not curl `main` in CI
-- New cluster-free GitHub Actions workflow on PRs to `main` / `release-*` and on push to `main`
-- Run it on the charts chart-testing already cares about: `rhdh`, `must-gather`, `orchestrator-infra`
+- In CI, `curl` `helm-coverage.sh` from [chart-coverage](https://github.com/jCOTINEAU/chart-coverage) at a **pinned commit SHA** (not `main`). Do not vendor the script into `rhdh-chart`
+- Hook coverage into existing workflows; do not add a standalone coverage workflow
+- **PRs (`test.yaml`)**: coverage only for charts already in that workflow's matrix (changed charts; all non-excluded charts if CI files changed)
+- **Nightly (`nightly.yaml`)**: coverage for every supported chart the nightly matrix already lists (`ct.yaml` exclusions unchanged)
 - Rewrite Cobertura paths to `charts/<chart>/templates/...` so Codecov can map files
 - Keep `codecov.yml` project/patch statuses **informational** until the team picks a real target
 - Leave `ct lint` / `ct install` unchanged. This coverage job does not replace install tests
@@ -73,9 +71,8 @@ This is **not** Go line coverage and **not** cluster-install coverage. It answer
 - ✅ Uncovered template branches become visible on PRs once the `main` baseline exists
 
 ### Negative
-- ❌ First rhdh figure is ~28%. That is expected (only `ci/` branches), but it looks “low” next to Go coverage
-- ❌ Vendoring ~1.5k lines of upstream bash; we exclude it from Differential ShellCheck and Sonar rather than forking the tool
-- ❌ chart-coverage is a small project. We pin a SHA and replace the file to upgrade
+- ❌ CI must be able to fetch that GitHub SHA (upstream or GitHub outage = no coverage job)
+- ❌ Upgrading means bumping the SHA in the workflow, not editing a vendored file
 - ❌ Nested helper / straight-line `define` instrumentation has known upstream limits; numbers are directional, not an auditor-grade trace
 - ❌ Fork PRs do not get `CODECOV_TOKEN`; upload is best-effort (`fail_ci_if_error: false`)
 
@@ -83,3 +80,7 @@ This is **not** Go line coverage and **not** cluster-install coverage. It answer
 - ⚖️ Informational Codecov checks: visible, not a merge gate, until the team sets a target
 - ⚖️ `backstage` and demo orchestrator software-template charts stay out, consistent with `ct.yaml`
 - ⚖️ helm-unittest / helmcov remain valid later if we introduce `*_test.yaml` suites; this ADR does not forbid that
+
+##References
+
+Spike notes: [Google doc](https://docs.google.com/document/d/1iMGzEt_tpxikwQ01hFQphLoEBCWeHrXTlTR1g00NGhg/edit). Implementation: [RHIDP-18349](https://redhat.atlassian.net/browse/RHIDP-18349), [rhdh-chart#698](https://github.com/redhat-developer/rhdh-chart/pull/698).
