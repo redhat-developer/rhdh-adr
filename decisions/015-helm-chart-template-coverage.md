@@ -19,7 +19,7 @@ Today:
 - Do not rewrite charts or replace chart-testing
 - OSS, pinnable
 - Codecov-compatible report (Cobertura XML). Go coverprofile format is not required
-- Coverage must not become a merge gate on day one
+- Coverage must start as informational, not a merge gate
 
 ## Decision
 
