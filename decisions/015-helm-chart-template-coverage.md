@@ -16,7 +16,7 @@
 
 **Constraints**:
 - Do not rewrite charts or replace chart-testing
-- OSS, pinable
+- OSS, pinnable
 - Codecov-compatible report (Cobertura XML). Go `cover.out` is not required
 - Coverage must not become a merge gate on day one
 
