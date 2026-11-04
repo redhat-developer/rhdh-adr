@@ -4,7 +4,8 @@
 
 **Problem**: The RHDH Helm chart repository has no template-branch coverage signal. We cannot tell which `if` / `else` / `with` / `range` paths existing CI values actually exercise, and we cannot upload that to Codecov the way the operator uploads Go coverage.
 
-[RHIDP-11864](https://redhat.atlassian.net/browse/RHIDP-11864) asked for unit-test coverage on `rhdh-chart`. Charts are Go templates, not Go, so `cover.out` does not apply. Today:
+[RHIDP-11864](https://redhat.atlassian.net/browse/RHIDP-11864) asked for unit-test coverage on `rhdh-chart`. Helm charts use Go template syntax but are not compiled Go code, so Go's native coverage tooling does not apply.
+Today:
 
 - Chart-testing (`ct lint` / `ct install`) and Helm test hooks are **pass/fail**. They do not produce a coverage percentage.
 - Values used in CI live under `charts/<chart>/ci/`. There are **no** helm-unittest `*_test.yaml` suites in the repo.
