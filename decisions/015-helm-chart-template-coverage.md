@@ -60,7 +60,7 @@ This is **not** Go line coverage and **not** cluster-install coverage. It answer
 
 ### Alternative 6: Wait for a “Helm-native” coverage tool
 - **Approach**: Do nothing until Helm or helm-unittest ships a released, values-file-only coverage command.
-- **Rejected because**: the epic needs a path now. chart-coverage is OSS, pinable, and works with current `ci/` files. We can supersede this ADR later if a released unittest coverage story lands and we have suites.
+- **Rejected because**: the epic needs a path now. chart-coverage is OSS, pinnable, and works with current `ci/` files. We can supersede this ADR later if a released unittest coverage story lands and we have suites.
 
 ## Consequences
 
