@@ -38,7 +38,7 @@ This is **not** Go line coverage and **not** cluster-install coverage. It answer
 ## Alternatives Considered
 
 ### Alternative 1: helm-unittest `--coverage`
-- **Approach**: Adopt [helm-unittest](https://github.com/helm-unittest/helm-unittest) suites and use `--coverage` (Cobertura/LCOV). Coverage is implemented on helm-unittest `main` and listed for unreleased **1.3.0**.
+- **Approach**: Adopt [helm-unittest](https://github.com/helm-unittest/helm-unittest) suites and use `--coverage` (Cobertura/LCOV). Coverage is implemented on helm-unittest `main` and reportedly planned for a future release.
 - **Rejected because**: `rhdh-chart` has no `*_test.yaml` files. Getting a number would mean rewriting CI around helm-unittest, which the spike was asked to avoid. Revisit if the repo later adds unittest suites and 1.3.0 is released.
 
 ### Alternative 2: helmcov
