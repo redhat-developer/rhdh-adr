@@ -15,6 +15,11 @@ set_github_output() {
   } >> "$GITHUB_OUTPUT"
 }
 
+write_summary() {
+  [ -z "${GITHUB_STEP_SUMMARY:-}" ] && return
+  printf '%s\n' "$1" >> "$GITHUB_STEP_SUMMARY"
+}
+
 suggest_next_number() {
   local ref=${1:-}
   local existing=() num ex n maxNum=0 padded found=0 next=""
@@ -67,6 +72,7 @@ if [ "${1:-}" = "--ci-suggest" ]; then
     errors="ADR filename conflict: ${added} already exists on ${base_ref}, change to a different filename in the format NNN-kebab-case-title.md (e.g. 008-my-decision.md)"
     echo "$errors"
     set_github_output error "$errors"
+    write_summary ":x: $errors"
     exit 1
   done < <(git diff --name-only --diff-filter=A "${merge_base}..HEAD" -- 'decisions/*.md')
 
@@ -78,6 +84,7 @@ if [ "${1:-}" = "--ci-suggest" ]; then
       errors="ADR filename must be NNN-kebab-case-title.md (e.g. 008-my-decision.md): ${changed}"
       echo "$errors"
       set_github_output error "$errors"
+      write_summary ":x: $errors"
       exit 1
     fi
   done < <(git diff --name-only --diff-filter=AM "origin/${base_ref}..HEAD" -- 'decisions/*.md')
@@ -98,6 +105,7 @@ if [ "${1:-}" = "--ci-suggest" ]; then
     suggestion="Recommended to name the next ADR file as: \`decisions/${next}-${suffix}\` to follow the order of files in decisions/ folder of rhdh-adr."
     echo "$suggestion"
     set_github_output suggestion "$suggestion"
+    write_summary ":warning: $suggestion"
   fi
   exit 0
 fi
