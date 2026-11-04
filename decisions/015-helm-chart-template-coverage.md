@@ -81,6 +81,6 @@ This is **not** Go line coverage and **not** cluster-install coverage. It answer
 - ⚖️ `backstage` and demo orchestrator software-template charts stay out, consistent with `ct.yaml`
 - ⚖️ helm-unittest / helmcov remain valid later if we introduce `*_test.yaml` suites; this ADR does not forbid that
 
-##References
+## References
 
 Spike notes: [Google doc](https://docs.google.com/document/d/1iMGzEt_tpxikwQ01hFQphLoEBCWeHrXTlTR1g00NGhg/edit). Implementation: [RHIDP-18349](https://redhat.atlassian.net/browse/RHIDP-18349), [rhdh-chart#698](https://github.com/redhat-developer/rhdh-chart/pull/698).
