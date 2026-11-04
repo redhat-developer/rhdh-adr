@@ -39,7 +39,7 @@ This is **not** Go line coverage and **not** cluster-install coverage. It answer
 
 ### Alternative 1: helm-unittest `--coverage`
 - **Approach**: Adopt [helm-unittest](https://github.com/helm-unittest/helm-unittest) suites and use `--coverage` (Cobertura/LCOV). Coverage is implemented on helm-unittest `main` and reportedly planned for a future release.
-- **Rejected because**: `rhdh-chart` has no `*_test.yaml` files. Getting a number would mean rewriting CI around helm-unittest, which the spike was asked to avoid. Revisit if the repo later adds unittest suites and 1.3.0 is released.
+- **Rejected because**: `rhdh-chart` has no `*_test.yaml` files. Getting a number would mean rewriting CI around helm-unittest, which the spike was asked to avoid. Revisit if the repo adopts helm-unittest suites and upstream helm-unittest ships `--coverage` in a stable release.
 
 ### Alternative 2: helmcov
 - **Approach**: [helmcov](https://github.com/jordan-simonovski/helmcov) renders the chart from values, helm-unittest suite values, and generated branch scenarios. It reports line and branch coverage (`if` / `range` / `with`) and emits Go `coverprofile` plus Cobertura. There is a GitHub Action that can comment on PRs.
