@@ -117,13 +117,13 @@ This is the default path for most disconnected OpenShift clusters:
 
 1. **Discover**: `oc-mirror` reads `spec.relatedImages` from the CSV automatically
 2. **Mirror**: `oc-mirror` copies all listed images to the customer's mirror registry
-3. **Resolve**: `oc-mirror` creates IDMS/ITMS resources on the cluster. CRI-O transparently redirects image pulls. OLM also rewrites the `RELATED_IMAGE_*` env vars on the operator pod. The operator reads these env vars and uses them when creating Kubernetes objects.
+3. **Resolve**: `oc-mirror` creates IDMS/ITMS resources on the cluster. CRI-O transparently redirects image pulls. The operator reads the `RELATED_IMAGE_*` env vars and uses them when creating Kubernetes objects, while users may also override those refs explicitly when needed.
 
 No manual steps beyond running `oc-mirror`. This is exactly how every other Red Hat operator works.
 
-#### OpenShift (Rosa HCP or other clusters where IDMS does not work)
+#### Clusters where IDMS does not work (for example Rosa HCP)
 
-IDMS/ITMS are unavailable on Rosa HCP because the control plane is managed. But users can still use `oc-mirror` to copy images, and then override the operator's env vars:
+IDMS/ITMS are unavailable on Rosa HCP because the control plane is managed. But users can still use `oc-mirror` to copy images, and then override the operator's env vars on the Subscription or ClusterExtension:
 
 1. **Discover & Mirror**: Same as above — `oc-mirror` copies images from `spec.relatedImages`
 2. **Resolve**: Instead of IDMS, the user overrides `RELATED_IMAGE_*` env vars via the Subscription (OLM v0) or ClusterExtension (OLM v1):
@@ -157,10 +157,18 @@ The operator reads these env vars and uses them in the Kubernetes objects it cre
 
 Customers not on OpenShift typically do not want to use `oc`-related tools. The workflow is:
 
-1. **Discover**: Extract the image list from `spec.relatedImages` in the CSV with a one-liner:
+1. **Discover**: Extract the CSV from the shipped bundle image, then read the image list from `spec.relatedImages`. Note that the CSV is not shipped as a standalone file, so the bundle image is the source of truth:
    ```bash
-   # Extract all related images from the CSV
-   yq eval '.spec.relatedImages[].image' backstage-operator.clusterserviceversion.yaml
+   # Extract the CSV from the shipped bundle image
+   BUNDLE_IMAGE="registry.redhat.io/rhdh/rhdh-operator-bundle:${RHDH_VERSION}"
+   CONTAINER_ID=$(podman create "${BUNDLE_IMAGE}")
+   podman cp "$CONTAINER_ID:/manifests/rhdh-operator.clusterserviceversion.yaml" ./rhdh-operator.clusterserviceversion.yaml
+   podman rm "$CONTAINER_ID"
+
+   # List all related images, keeping each name so users know which
+   # RELATED_IMAGE_* env var it maps to (e.g. name: postgresql ->
+   # RELATED_IMAGE_postgresql)
+   yq '.spec.relatedImages[]' rhdh-operator.clusterserviceversion.yaml
    ```
 2. **Mirror**: Users copy images to their mirror registry using their own tooling (skopeo, crane, or whatever their organisation standardises on). We do not prescribe a specific tool.
 3. **Resolve**: Set `RELATED_IMAGE_*` env vars on the operator deployment, pointing at the mirrored images.
@@ -170,7 +178,7 @@ Customers not on OpenShift typically do not want to use `oc`-related tools. The 
 OKP is an optional flavour component, but it is still included in `spec.relatedImages` for standard discovery and mirroring because the operator ships the image and customers need to know exactly what to mirror when they enable the `intelligent-assistant-okp` add-on. This resolves the review concern without losing the standard `oc-mirror` workflow: the image is discoverable, but it is not required for the default base install.
 
 **Mitigations**:
-1. **Now**: Document clearly that OKP is optional and only required when the `intelligent-assistant-okp` flavour is enabled. Users who do not enable it can exclude it from their `ImageSetConfiguration` if they want a leaner disconnected mirror set.
+1. **Now**: Document clearly that OKP is optional and only required when the `intelligent-assistant-okp` flavour is enabled. This is acceptable for the interim period while the platform does not yet support marking optional `spec.relatedImages` entries.
 2. **Future**: [OCPSTRAT-3755](https://redhat.atlassian.net/browse/OCPSTRAT-3755) — the OCP team is planning to add mandatory vs optional classification for `spec.relatedImages`. Once available, we can mark OKP as optional so `oc-mirror` can skip it by default while still exposing it for flavour-specific use.
 
 ### Orchestrator
@@ -196,7 +204,7 @@ The current [Orchestrator air-gap documentation](https://docs.redhat.com/en/docu
 
 | What | Timeline | Detail |
 |------|----------|--------|
-| **Update `prepare-restricted-environment.sh`** | 2.2 | Add `spec.relatedImages` as primary image source (backward-compatible fallback to old CSV parsing for older bundles) and ensure e2e works as expected|
+| **`prepare-restricted-environment.sh` image discovery** | No change | The script already discovers images from both `spec.relatedImages` and `RELATED_IMAGE_*` env vars, so the two new entries are picked up automatically. Verify this in E2E rather than changing the script. |
 | **Deprecation notice** | 2.2 release notes | Note that the script is deprecated and will be removed in 2.3. Document the manual `spec.relatedImages`-based workflow as the replacement. |
 | **Remove from docs and repo** | 2.3 | Remove the script from customer-facing documentation and the operator repository. Optionally migrate to [rhdh-core](https://github.com/redhat-developer/rhdh) for internal E2E testing and Helm chart air-gap testing. |
 | **`mirror-plugins.sh`** | No change | Remains available for plugin OCI packages. Separate concern from container images. |
@@ -270,12 +278,12 @@ This was the approach in [earlier revisions of this ADR](https://github.com/redh
 ✅ **Single mechanism**: One approach (`RELATED_IMAGE_*` env vars) works on OpenShift, Rosa HCP, and vanilla K8s — no parallel mechanisms to learn  
 ✅ **Backward compatible**: Existing core image handling (`backstage`, `postgresql`) continues unchanged  
 ✅ **Future-proofed**: [OCPSTRAT-3755](https://redhat.atlassian.net/browse/OCPSTRAT-3755) will add mandatory/optional classification to `spec.relatedImages`, solving the OKP size concern natively  
-✅ **Script deprecation**: Simplifies maintenance — the script was not widely used by customers and added support burden  
+✅ **Script deprecation**: Simplifies maintenance, and the script does not seem widely used by air-gapped customers  
 
 ### Negative
 
 ❌ **CSV maintenance**: New env vars, digest pinning, staleness checks in `sync-midstream.sh`  
-❌ **OKP image is large**: Until [OCPSTRAT-3755](https://redhat.atlassian.net/browse/OCPSTRAT-3755) lands, `oc-mirror` copies the 10+ GB OKP image even if unused (mitigated by documentation + `ImageSetConfiguration` exclusion)  
+❌ **OKP image is large**: Until [OCPSTRAT-3755](https://redhat.atlassian.net/browse/OCPSTRAT-3755) lands, `oc-mirror` copies the 10+ GB OKP image even if unused. `ImageSetConfiguration` currently only filters at the package/channel level, so excluding a single `spec.relatedImages` entry is not possible today; this is documented as a known limitation that depends on OCPSTRAT-3755  
 ❌ **Downstream work**: `sync-midstream.sh` needs updates for new `spec.relatedImages` entries  
 ❌ **E2E test updates**: Disconnected E2E tests need to cover the new images and env var overrides  
 
