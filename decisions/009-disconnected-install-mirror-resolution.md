@@ -2,17 +2,18 @@
 
 ## Executive Summary / TL;DR
 
-Add all operator-managed container images to the CSV's `spec.relatedImages` and honour the corresponding `RELATED_IMAGE_*` environment variables in the operator's controller code. This is the standard Red Hat operator pattern for disconnected (air-gapped) environments.
+Add the operator-managed container images that are required by default to the CSV's `spec.relatedImages` and honour the corresponding `RELATED_IMAGE_*` environment variables in the operator's controller code. This is the standard Red Hat operator pattern for disconnected (air-gapped) environments.
 
-**Images to add** (2 new entries for RHDH 2.1+):
+**Images to add** (2 entries for RHDH 2.1+):
 - `lightspeed-core` — the Lightspeed AI service sidecar
-- `okp` — the Offline Knowledge Portal deployment (10+ GB, optional flavour)
+- `okp` — the optional Offline Knowledge Portal deployment for the `intelligent-assistant-okp` flavour
 
-> The RAG init container image (`lightspeed-rag-init`) was removed in RHDH 2.1 and is no longer shipped.
+`okp` remains optional from a product perspective: the base Intelligent Assistant is enabled by default in [Enabling Intelligent Assistant](https://github.com/redhat-developer/rhdh-operator/blob/main/docs/intelligent-assistant.md), while OKP is explicitly disabled unless the `intelligent-assistant-okp` add-on is selected as documented in [Enabling OKP on OpenShift](https://github.com/redhat-developer/rhdh-operator/blob/main/docs/intelligent-assistant-okp-openshift.md). Even so, as Armel noted, it should still be discoverable via `spec.relatedImages` because the operator ships it and customers need a standard way to mirror and override it when they enable the add-on. The RAG init container image (`lightspeed-rag-init`) was removed in RHDH 2.1 and is no longer shipped.
 
 **What this gives users**:
-- **OpenShift**: `oc-mirror` discovers all images automatically from `spec.relatedImages`. On clusters where IDMS works, resolution is transparent. On clusters where IDMS does not work (e.g., Rosa HCP), users override via Subscription or ClusterExtension `spec.config.env`.
+- **OpenShift**: `oc-mirror` discovers the default images automatically from `spec.relatedImages`. On clusters where IDMS works, resolution is transparent. On clusters where IDMS does not work (e.g., Rosa HCP), users override via Subscription or ClusterExtension `spec.config.env`.
 - **Vanilla Kubernetes**: Users extract the image list from `spec.relatedImages` with a one-liner, mirror with their own tooling, and override `RELATED_IMAGE_*` env vars on the operator deployment.
+- **Optional OKP flavour**: When the `intelligent-assistant-okp` add-on is enabled, customers mirror the OKP image explicitly and set `RELATED_IMAGE_okp` as needed. It remains a flavour-specific concern, but it is still discoverable through `spec.relatedImages` so the standard disconnected workflow works consistently.
 
 **What this does NOT include**: Extending the ConfigMap-based mirror resolution (currently used for dynamic plugin OCI packages) to container images. After team discussion, this was determined to be unnecessary — the `RELATED_IMAGE_*` env var override mechanism already covers all platforms, and extending the ConfigMap approach to containers risks reinventing IDMS and creating user confusion. The existing ConfigMap mechanism for plugin OCI packages remains unchanged and is not affected by this ADR.
 
@@ -75,7 +76,7 @@ RHDH should follow this established pattern, see OCP docs, [Chapter 10. Using Op
 
 ### Extend `spec.relatedImages` and honour `RELATED_IMAGE_*` env vars for all operator-managed container images
 
-This is a single, consistent approach that works on OpenShift (standard and Rosa HCP) and vanilla Kubernetes. No additional runtime resolution mechanism is needed for container images.
+This is a single, consistent approach that works on OpenShift (standard and Rosa HCP) and vanilla Kubernetes. No additional runtime resolution mechanism is needed for the container images the operator ships. The key review concern is not whether the image should be discoverable, but whether it is required for the default install. We therefore include both `lightspeed-core` and `okp` in `spec.relatedImages` for discoverability and mirror automation, while documenting that OKP remains optional and is only needed when the `intelligent-assistant-okp` add-on is enabled. This matches the product behavior documented in [Enabling Intelligent Assistant](https://github.com/redhat-developer/rhdh-operator/blob/main/docs/intelligent-assistant.md) and [Enabling OKP on OpenShift](https://github.com/redhat-developer/rhdh-operator/blob/main/docs/intelligent-assistant-okp-openshift.md).
 
 **Images to add to the CSV**:
 
@@ -95,7 +96,7 @@ This is a single, consistent approach that works on OpenShift (standard and Rosa
   value: registry.redhat.io/offline-knowledge-portal/rhokp-rhel9@sha256:...
 ```
 
-**Operator code**: For each new image, the controller code reads the `RELATED_IMAGE_*` env var and, if set, uses it instead of the default image from the flavour ConfigMap. This follows the existing pattern in [`deployment.go`](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/deployment.go#L31):
+**Operator code**: For each image, the controller code reads the `RELATED_IMAGE_*` env var and, if set, uses it instead of the default image from the flavour ConfigMap. This follows the existing pattern in [`deployment.go`](https://github.com/redhat-developer/rhdh-operator/blob/main/pkg/model/deployment.go#L31):
 
 ```go
 const LightspeedCoreImageEnvVar = "RELATED_IMAGE_lightspeed_core"
@@ -106,7 +107,7 @@ if os.Getenv(LightspeedCoreImageEnvVar) != "" {
 }
 ```
 
-**`make bundle`** automatically generates `spec.relatedImages` from the `RELATED_IMAGE_*` env vars in the CSV deployment spec — no manual maintenance of the `spec.relatedImages` list is required.
+**`make bundle`** automatically generates `spec.relatedImages` from the `RELATED_IMAGE_*` env vars in the CSV deployment spec — no manual maintenance of the default `spec.relatedImages` list is required.
 
 ### How This Works on Each Platform
 
@@ -166,11 +167,11 @@ Customers not on OpenShift typically do not want to use `oc`-related tools. The 
 
 ### OKP Image Size (10+ GB)
 
-OKP is an optional flavour component, but it is part of the operator's shipped bill of materials. We include it in `spec.relatedImages` by default.
+OKP is an optional flavour component, but it is still included in `spec.relatedImages` for standard discovery and mirroring because the operator ships the image and customers need to know exactly what to mirror when they enable the `intelligent-assistant-okp` add-on. This resolves the review concern without losing the standard `oc-mirror` workflow: the image is discoverable, but it is not required for the default base install.
 
 **Mitigations**:
-1. **Now**: Document clearly that OKP is optional. Users who don't enable the intelligent-assistant flavour with offline knowledge portal can exclude it from their `ImageSetConfiguration`.
-2. **Future**: [OCPSTRAT-3755](https://redhat.atlassian.net/browse/OCPSTRAT-3755) — the OCP team is planning to add mandatory vs optional classification for `spec.relatedImages`. Once available, we mark OKP as optional so `oc-mirror` skips it by default.
+1. **Now**: Document clearly that OKP is optional and only required when the `intelligent-assistant-okp` flavour is enabled. Users who do not enable it can exclude it from their `ImageSetConfiguration` if they want a leaner disconnected mirror set.
+2. **Future**: [OCPSTRAT-3755](https://redhat.atlassian.net/browse/OCPSTRAT-3755) — the OCP team is planning to add mandatory vs optional classification for `spec.relatedImages`. Once available, we can mark OKP as optional so `oc-mirror` can skip it by default while still exposing it for flavour-specific use.
 
 ### Orchestrator
 
@@ -207,7 +208,7 @@ The current [Orchestrator air-gap documentation](https://docs.redhat.com/en/docu
 | `sync-midstream.sh` | Add staleness checks for the 2 new `spec.relatedImages` entries (`lightspeed-core`, `okp`), following the same pattern used for `postgresql` | Without this, when Red Hat releases new versions of these images, the ConfigMaps will update but the CSV entries will go stale. `oc-mirror` reads from `spec.relatedImages`, so stale entries break the air-gap workflow. |
 | `replaceUpstreamImages.sh` | **No changes needed** — already handles digest pinning for all image references in the CSV | Existing logic covers new entries automatically |
 
-**Conforma validation**: Adding images to `spec.relatedImages` enables [Conforma](https://redhat.atlassian.net/browse/RHDHSUPP-417) downstream pipeline validation to verify that Lightspeed images come from trusted registries — the same validation already applied to `backstage` and `postgresql`.
+**Conforma validation**: Adding images to `spec.relatedImages` enables [Conforma](https://conforma.dev/) downstream pipeline validation to verify that Lightspeed images come from trusted registries — the same validation already applied to `backstage` and `postgresql`.
 
 ### Documentation Changes ([red-hat-developers-documentation-rhdh](https://github.com/redhat-developer/red-hat-developers-documentation-rhdh))
 
