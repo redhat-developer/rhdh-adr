@@ -161,6 +161,8 @@ Notes:
 - Values must be non-empty. An empty env value produces an empty `relatedImages[].image`, which breaks mirroring. CI must reject it.
 - Use one canonical env var name per image. If the same image appears under two names, operator-sdk emits the image once with an empty name.
 - The sonataflow psql job reuses `RELATED_IMAGE_postgresql` rather than introducing a second PostgreSQL entry. It runs `psql` against the same database operand, so the same product image is appropriate. If a future orchestrator version requires a different client version, it gets its own env var.
+- The Tekton `ubi10-minimal` reference appears in three step images (`flatten`, `build-manifests`, `build-gitops`); all three resolve through the single `RELATED_IMAGE_ubi_minimal` env var.
+- The Tekton git reference is a `Task` parameter default (`BASE_IMAGE`), consumed as `image: $(params.BASE_IMAGE)` rather than a literal `image:` field. The operator still chooses it when the workflow does not override the parameter, so it is covered. The `quay.io/$(params...)` reference that the workflow builds at runtime is not operator-chosen and stays out of scope.
 - `plugin-installer` is added now, not at GA. The env var is only consumed when `OPERATOR_DP_PROCESSING=true`, so it is inert for default installs, and adding it now makes the dev-preview path usable in disconnected environments.
 - The `lightspeed-rag-init` init-container image mentioned in earlier reviews was removed in RHDH 2.1 and is not part of this inventory.
 
