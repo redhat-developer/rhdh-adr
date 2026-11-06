@@ -1,12 +1,12 @@
-# ADR-011: Disconnected Install: Complete Container Image Inventory and Resolution
+# ADR: Disconnected Install: Complete Container Image Inventory and Resolution
 
 ## Executive Summary / TL;DR
 
 **Decision**: adopt one complete contract for container images in disconnected environments:
 
-> Every container image the operator can inject into a workload it creates must be listed in the CSV's `spec.relatedImages` and must be overridable through a matching `RELATED_IMAGE_*` environment variable. No operator-chosen image may require reading operator source or bundle ConfigMaps to discover.
+> Every container image the operator can inject into a workload it creates for the RHDH profile (`config/profile/rhdh/**`) must be listed in the CSV's `spec.relatedImages` and must be overridable through a matching `RELATED_IMAGE_*` environment variable. No operator-chosen image may require reading operator source or bundle ConfigMaps to discover.
 
-The mechanism is the standard Red Hat operator pattern: `spec.relatedImages` for discovery and mirroring, and `RELATED_IMAGE_*` environment variables for resolution. It is not a new mechanism. It generalizes the substitution the operator already performs for `backstage` and `postgresql` to every image chosen by the operator.
+The mechanism is the standard Red Hat operator pattern: `spec.relatedImages` for discovery and mirroring, and `RELATED_IMAGE_*` environment variables for resolution. It is not a new mechanism. It generalizes the substitution the operator already performs for `backstage` and `postgresql` to every image chosen by the RHDH profile.
 
 **Images covered by this ADR**:
 
@@ -27,6 +27,7 @@ The mechanism is the standard Red Hat operator pattern: `spec.relatedImages` for
 - Dynamic plugin OCI packages — handled by the existing ConfigMap mirror mechanism.
 - OSL / Knative operator images — shipped by their own operators.
 - Orchestrator runtime downloads from GitHub and `developers.redhat.com` — tracked separately.
+- `config/profile/backstage.io` defaults — a bare upstream Backstage profile for development, not the RHDH product profile.
 
 **What this does NOT include**: extending ConfigMap-based mirror resolution to container images. That mechanism remains reserved for OCI plugin packages. Container images use `spec.relatedImages` plus `RELATED_IMAGE_*` env vars only. This keeps one resolution path for kubelet-pulled images and avoids reimplementing IDMS inside the operator.
 
@@ -104,12 +105,12 @@ See the OCP documentation, [Using Operator Lifecycle Manager in disconnected env
 
 ### The contract
 
-RHDH adopts the following rule for every image the operator selects:
+RHDH adopts the following rule for every image the operator selects for the RHDH profile:
 
 1. **Discoverable**: the image is listed in the CSV's `spec.relatedImages`, either directly or as the value of a `RELATED_IMAGE_*` env var on the operator deployment (from which `make bundle` generates the entry).
-2. **Overridable**: the operator resolves the image through the matching `RELATED_IMAGE_*` env var at reconciliation time, falling back to the upstream default when the env var is unset.
+2. **Overridable**: the operator resolves the image through the matching `RELATED_IMAGE_*` env var at reconciliation time, falling back to the upstream default when the env var is unset. Features that require an explicit value are the exception: `plugin-installer` errors when DP processing is enabled and the env var is empty.
 3. **Documented**: the image appears in the operator air-gap reference with its env var name, default value, and the flavour/plugin that requires it.
-4. **Guarded**: CI fails if a flavour or plugin-dep introduces a literal `image:` that is not resolved through the mechanism.
+4. **Guarded**: CI fails if a flavour or plugin-dep under `config/profile/rhdh/**` introduces a literal `image:` that is not resolved through the mechanism.
 
 The contract applies to images the operator injects into workloads it creates. It does not apply to images pulled by other operators or by tooling inside a container.
 
@@ -123,13 +124,13 @@ The contract applies to images the operator injects into workloads it creates. I
 - name: RELATED_IMAGE_backstage
   value: quay.io/rhdh-community/rhdh:next
 - name: RELATED_IMAGE_lightspeed_core
-  value: quay.io/lightspeed-core/lightspeed-stack:0.7.1
+  value: quay.io/lightspeed-core/lightspeed-stack:0.7.3
 - name: RELATED_IMAGE_okp
-  value: registry.redhat.io/offline-knowledge-portal/rhokp-rhel9:1.3.0-1792010339
+  value: registry.redhat.io/offline-knowledge-portal/rhokp-rhel9:1.3.0-1793303796
 - name: RELATED_IMAGE_ubi_minimal
-  value: registry.access.redhat.com/ubi10-minimal
+  value: registry.access.redhat.com/ubi10-minimal:10.1
 - name: RELATED_IMAGE_tekton_git
-  value: cgr.dev/chainguard/git:root-2.39@sha256:...
+  value: cgr.dev/chainguard/git:root-2.39@sha256:7759f87050dd8bacabe61354d75ccd7f864d6b6f8ec42697db7159eccd491139
 - name: RELATED_IMAGE_plugin_installer
   value: quay.io/rhdh-community/rhdh-plugin-installer:latest
 ```
@@ -142,13 +143,13 @@ relatedImages:
     name: postgresql
   - image: quay.io/rhdh-community/rhdh:next
     name: backstage
-  - image: quay.io/lightspeed-core/lightspeed-stack:0.7.1
+  - image: quay.io/lightspeed-core/lightspeed-stack:0.7.3
     name: lightspeed-core
-  - image: registry.redhat.io/offline-knowledge-portal/rhokp-rhel9:1.3.0-1792010339
+  - image: registry.redhat.io/offline-knowledge-portal/rhokp-rhel9:1.3.0-1793303796
     name: okp
-  - image: registry.access.redhat.com/ubi10-minimal
+  - image: registry.access.redhat.com/ubi10-minimal:10.1
     name: ubi-minimal
-  - image: cgr.dev/chainguard/git:root-2.39@sha256:...
+  - image: cgr.dev/chainguard/git:root-2.39@sha256:7759f87050dd8bacabe61354d75ccd7f864d6b6f8ec42697db7159eccd491139
     name: tekton-git
   - image: quay.io/rhdh-community/rhdh-plugin-installer:latest
     name: plugin-installer
@@ -156,14 +157,16 @@ relatedImages:
 
 Notes:
 
+- The pins above match `rhdh-operator` `main` and `release-2.1` at the time of writing (Lightspeed `0.7.3`, OKP `1.3.0-1793303796`). Refresh them whenever the operator pins move; do not copy an old ADR revision into an implementation.
 - `operator-sdk generate bundle` derives `spec.relatedImages` from `RELATED_IMAGE_*` env vars found on container specs in the bundle manifests. It does not scan ConfigMap contents, so the env var must be on the operator deployment.
 - operator-sdk normalises names: `RELATED_IMAGE_lightspeed_core` becomes `lightspeed-core`, `RELATED_IMAGE_plugin_installer` becomes `plugin-installer`. The underscore/hyphen difference is expected.
 - Values must be non-empty. An empty env value produces an empty `relatedImages[].image`, which breaks mirroring. CI must reject it.
+- Values must be pinned to a tag or digest. A bare reference such as `registry.access.redhat.com/ubi10-minimal` resolves to `:latest` and drifts between mirror runs; the source-of-truth block above pins `:10.1`. CI must reject untagged entries. The same applies to mutable tags such as `:latest` on other images; digest-pin them where the product pipeline allows.
 - Use one canonical env var name per image. If the same image appears under two names, operator-sdk emits the image once with an empty name.
 - The sonataflow psql job reuses `RELATED_IMAGE_postgresql` rather than introducing a second PostgreSQL entry. It runs `psql` against the same database operand, so the same product image is appropriate. If a future orchestrator version requires a different client version, it gets its own env var.
 - The Tekton `ubi10-minimal` reference appears in three step images (`flatten`, `build-manifests`, `build-gitops`); all three resolve through the single `RELATED_IMAGE_ubi_minimal` env var.
 - The Tekton git reference is a `Task` parameter default (`BASE_IMAGE`), consumed as `image: $(params.BASE_IMAGE)` rather than a literal `image:` field. The operator still chooses it when the workflow does not override the parameter, so it is covered. The `quay.io/$(params...)` reference that the workflow builds at runtime is not operator-chosen and stays out of scope.
-- `plugin-installer` is added now, not at GA. The env var is only consumed when `OPERATOR_DP_PROCESSING=true`, so it is inert for default installs, and adding it now makes the dev-preview path usable in disconnected environments.
+- `plugin-installer` is added now, not at GA. The env var is only consumed when `OPERATOR_DP_PROCESSING=true`, so it is runtime-inert for default installs. It is **not** mirroring-inert: `oc-mirror` copies every `spec.relatedImages` entry, so disconnected users pay the mirror cost even when DP processing is off. Adding it now makes the dev-preview path usable; the extra payload is accepted until OCPSTRAT-3755. When `OPERATOR_DP_PROCESSING=true` and the env var is empty, the operator errors instead of falling back, so the deployment must declare a non-empty default.
 - The `lightspeed-rag-init` init-container image mentioned in earlier reviews was removed in RHDH 2.1 and is not part of this inventory.
 
 ### Resolution mechanism
@@ -175,7 +178,7 @@ A raw `{{env.RELATED_IMAGE_*}}` placeholder is not sufficient on its own. It has
 ```yaml
 # Flavour: config/profile/rhdh/default-config/flavours/intelligent-assistant/deployment.yaml
 - name: lightspeed-core
-  image: '{{ relatedImage "lightspeed-core" "quay.io/lightspeed-core/lightspeed-stack:0.7.1" }}'
+  image: '{{ relatedImage "lightspeed-core" "quay.io/lightspeed-core/lightspeed-stack:0.7.3" }}'
 ```
 
 ```yaml
@@ -186,10 +189,10 @@ image: '{{ relatedImage "postgresql" "quay.io/fedora/postgresql-18:latest" }}'
 ```yaml
 # Plugin-deps: config/profile/rhdh/plugin-deps/tekton.yaml
 - name: BASE_IMAGE
-  default: '{{ relatedImage "tekton-git" "cgr.dev/chainguard/git:root-2.39@sha256:..." }}'
+  default: '{{ relatedImage "tekton-git" "cgr.dev/chainguard/git:root-2.39@sha256:7759f87050dd8bacabe61354d75ccd7f864d6b6f8ec42697db7159eccd491139" }}'
 # ...
 - name: flatten
-  image: '{{ relatedImage "ubi-minimal" "registry.access.redhat.com/ubi10-minimal" }}'
+  image: '{{ relatedImage "ubi-minimal" "registry.access.redhat.com/ubi10-minimal:10.1" }}'
 ```
 
 Operator changes:
@@ -232,6 +235,7 @@ This ADR chooses correctness over payload size: list every operator-deployable i
 | Dynamic plugin OCI packages | Pulled by skopeo inside the install-dynamic-plugins container | The existing ConfigMap mirror mechanism ([RHIDP-15003](https://redhat.atlassian.net/browse/RHIDP-15003)); still dev preview |
 | OSL / Knative operator images | Shipped and managed by their own operators | Each operator's own `spec.relatedImages` |
 | Orchestrator runtime downloads | `tekton.yaml` runs `curl` against `raw.githubusercontent.com` and `developers.redhat.com` at task runtime | Follow-up Jira; see [Follow-ups](#follow-ups) |
+| `config/profile/backstage.io` defaults | A bare Backstage profile for development and upstream testing, not the RHDH product profile. It hardcodes `ghcr.io/backstage/backstage` and has no `deployment-patch.yaml`, so there is no `RELATED_IMAGE_backstage` for its bundle | Profile maintainers; out of the RHDH disconnected-install contract |
 
 ### How this works on each platform
 
@@ -261,19 +265,19 @@ spec:
   config:
     env:
       - name: RELATED_IMAGE_backstage
-        value: mirror.company.com/rhdh/rhdh-hub-rhel9@sha256:...
+        value: mirror.company.com/rhdh/rhdh-hub-rhel9@sha256:<digest>
       - name: RELATED_IMAGE_postgresql
-        value: mirror.company.com/rhel10/postgresql-18@sha256:...
+        value: mirror.company.com/rhel10/postgresql-18@sha256:<digest>
       - name: RELATED_IMAGE_lightspeed_core
-        value: mirror.company.com/lightspeed-core/lightspeed-stack-rhel9@sha256:...
+        value: mirror.company.com/lightspeed-core/lightspeed-stack-rhel9@sha256:<digest>
       - name: RELATED_IMAGE_okp
-        value: mirror.company.com/offline-knowledge-portal/rhokp-rhel9@sha256:...
+        value: mirror.company.com/offline-knowledge-portal/rhokp-rhel9@sha256:<digest>
       - name: RELATED_IMAGE_ubi_minimal
-        value: mirror.company.com/ubi10/ubi-minimal@sha256:...
+        value: mirror.company.com/ubi10/ubi-minimal@sha256:<digest>
       - name: RELATED_IMAGE_tekton_git
-        value: mirror.company.com/tekton/git@sha256:...
+        value: mirror.company.com/tekton/git@sha256:<digest>
       - name: RELATED_IMAGE_plugin_installer
-        value: mirror.company.com/rhdh/rhdh-plugin-installer@sha256:...
+        value: mirror.company.com/rhdh/rhdh-plugin-installer@sha256:<digest>
 ```
 
 For OLM v0, `Subscription.spec.config.env` is the supported override (verified).
@@ -307,13 +311,13 @@ This path only works for images the operator actually reads env vars for — whi
 
 | Area | Files | Change | Validation |
 |------|-------|--------|------------|
-| Env var source | `config/profile/rhdh/patches/deployment-patch.yaml` | Add every `RELATED_IMAGE_*` env var from the inventory with a non-empty upstream default | `make bundle`; inspect `spec.relatedImages` |
+| Env var source | `config/profile/rhdh/patches/deployment-patch.yaml` | Add every `RELATED_IMAGE_*` env var from the inventory with a non-empty, pinned upstream default | `make bundle`; inspect `spec.relatedImages` for empty or untagged entries |
 | Intelligent Assistant flavour | `config/profile/rhdh/default-config/flavours/intelligent-assistant/deployment.yaml` | Replace the hardcoded `lightspeed-core` image with the `relatedImage` helper | Unit test: env set → override; env unset → fallback |
 | Plugin-deps | `config/profile/rhdh/plugin-deps/okp.yaml`, `sonataflow.yaml`, `tekton.yaml` | Replace hardcoded images with the helper, including the Tekton `BASE_IMAGE` default | Unit tests for each object type |
 | Template engine | `pkg/template/template.go` | Add `RelatedImages`, the `relatedImage` helper, and extend the detection guard | `pkg/template/template_test.go` |
 | Plugin-deps loader | `pkg/model/plugin_deps.go`, `GetPluginDeps` | Pass `TemplateData` through and call `ApplyTemplate` after the legacy replacements | `pkg/model` unit tests |
 | Bundle generation | `Makefile` / `make bundle` | No manual `relatedImages` editing; verify generation from env vars | Assert all entries present and no empty `image` |
-| CI guard | `.github/workflows`, `hack/` | Fail on literal `image:` under `config/profile/**` (allow `$(params.*)` and the core images) and on empty `relatedImages[].image` | PR check |
+| CI guard | `.github/workflows`, `hack/` | Fail on literal `image:` under `config/profile/rhdh/**` (allow `$(params.*)` and the core images), on empty `relatedImages[].image`, and on untagged related images (no tag or digest) | PR check |
 | E2E | `tests/e2e/` | Air-gap scenario with env overrides; replace the dependency on the deprecated script | Passes without external registry access |
 | OLM v1 override path | Bundle CSV / OLM v1 documentation | Define a supported way to set `RELATED_IMAGE_*` on a `ClusterExtension` (bundle configuration schema or documented post-install override) | Verified on an OLM v1 cluster |
 
@@ -347,7 +351,7 @@ Adding images to `spec.relatedImages` makes them subject to Conforma validation.
 | `.rhdh/docs/airgap.adoc` | Lists only RHDH and PostgreSQL | Add the full inventory, the optionality classification, and the env override examples. |
 | `docs/dynamic-plugins.md` | Plugin-installer is documented as a manual env var | Document that `RELATED_IMAGE_plugin_installer` is now a first-class related image and is required at GA. Fix the stale `deployment-patch.yaml#L31-L32` link for `CATALOG_INDEX_IMAGE`. |
 | Contributor docs (`docs/profiles.md` or new `docs/images.md`) | No rule for flavour/plugin-deps authors | Add the image contract, the `relatedImage` helper usage, the env var naming rule, and the CI check. This is required, not optional: without it the next flavour will reintroduce a hardcoded image. |
-| Helm chart | `charts/rhdh/values.yaml`; the ADR previously linked a non-existent `charts/redhat-developer-hub/values.yaml` | Fix the link. Note that Helm keeps its own image inventory and has no `spec.relatedImages` equivalent. Keep the Lightspeed and OKP pins in sync with the operator (they have drifted: 0.7.0 vs 0.7.1, 1.2.12 vs 1.3.0). |
+| Helm chart | `charts/rhdh/values.yaml`; the ADR previously linked a non-existent `charts/redhat-developer-hub/values.yaml` | Fix the link. Note that Helm keeps its own image inventory and has no `spec.relatedImages` equivalent. Keep the Lightspeed and OKP pins in sync with the operator. They are currently in sync (Lightspeed `0.7.3`, OKP `1.3.0-1793303796`), but they have drifted before, so add a check rather than relying on manual review. |
 
 ### Script lifecycle
 
@@ -436,9 +440,10 @@ This was the approach in earlier revisions of this ADR.
 ### Negative
 
 - ❌ **Mirror payload grows**: `oc-mirror` users mirror OKP (10+ GB) and the orchestrator images even when they do not use those flavours. This lasts until OCPSTRAT-3755.
+- ❌ **`plugin-installer` adds mirror cost before GA**: it is runtime-inert when `OPERATOR_DP_PROCESSING=false`, but `oc-mirror` still copies its `relatedImages` entry for every disconnected user.
 - ❌ **Optionality is documentation-only**: manual-mirroring users can skip opt-in images, but `oc-mirror` users cannot.
 - ❌ **OLM v1 override is undefined today**: `ClusterExtension.spec.config` is a bundle-specific schema and the RHDH bundle does not expose one, so OLM v1 clusters depend on IDMS or a post-install patch until the follow-up lands.
-- ❌ **Third-party registry risk**: `cgr.dev/chainguard/git` and upstream `quay.io/fedora/postgresql-18` may fail Conforma trusted-registry validation; `ubi10-minimal` is untagged upstream.
+- ❌ **Third-party registry risk**: `cgr.dev/chainguard/git` and upstream `quay.io/fedora/postgresql-18` may fail Conforma trusted-registry validation. The operator currently ships `ubi10-minimal` untagged (resolving to `:latest`); this ADR pins `:10.1` in the proposed env var, and CI must reject untagged values.
 - ❌ **Template failure mode**: a malformed placeholder or a renamed env var can break reconciliation; unit tests and the CI guard are required.
 - ❌ **Downstream work**: `replaceUpstreamImages.sh` and `sync-midstream.sh` need explicit changes; the generic digest loop is not sufficient.
 - ❌ **E2E dependency**: the `rhdh-airgap` mode still depends on the script until it is migrated.
@@ -449,7 +454,6 @@ This was the approach in earlier revisions of this ADR.
 - ⚖️ **Plugin OCI packages remain separate**: the ConfigMap mechanism is unaffected; plugins and container images have different pull paths.
 - ⚖️ **No CRD or API change**: this is a CSV and rendering change only.
 - ⚖️ **Helm is a separate inventory**: the chart keeps its own values and has no `spec.relatedImages` equivalent; the pins must be kept in sync manually.
-- ⚖️ **`plugin-installer` is inert until GA**: adding it now has no effect on default installs.
 
 ---
 
@@ -489,9 +493,11 @@ This was the approach in earlier revisions of this ADR.
 
 ### Downstream automation
 
-- [`build/scripts/intelligent-assistant/replaceUpstreamImages.sh`](https://github.com/redhat-developer/rhdh/blob/main/build/scripts/intelligent-assistant/replaceUpstreamImages.sh)
-- [`build/ci/sync-midstream.sh`](https://github.com/redhat-developer/rhdh/blob/main/build/ci/sync-midstream.sh)
-- [`build/scripts/checkImagesInFBC.sh`](https://github.com/redhat-developer/rhdh/blob/main/build/scripts/checkImagesInFBC.sh)
+These scripts live in the **internal downstream dist-git repository**, `gitlab.cee.redhat.com/rhidp/rhdh`, not in the public [`redhat-developer/rhdh`](https://github.com/redhat-developer/rhdh) GitHub repository (whose `build/` directory contains only containerfiles):
+
+- `build/scripts/intelligent-assistant/replaceUpstreamImages.sh`
+- `build/ci/sync-midstream.sh`
+- `build/scripts/checkImagesInFBC.sh`
 
 ### operator-sdk
 
