@@ -162,10 +162,13 @@ Notes:
 - Use one canonical env var name per image. If the same image appears under two names, operator-sdk emits the image once with an empty name.
 - The sonataflow psql job reuses `RELATED_IMAGE_postgresql` rather than introducing a second PostgreSQL entry. It runs `psql` against the same database operand, so the same product image is appropriate. If a future orchestrator version requires a different client version, it gets its own env var.
 - `plugin-installer` is added now, not at GA. The env var is only consumed when `OPERATOR_DP_PROCESSING=true`, so it is inert for default installs, and adding it now makes the dev-preview path usable in disconnected environments.
+- The `lightspeed-rag-init` init-container image mentioned in earlier reviews was removed in RHDH 2.1 and is not part of this inventory.
 
 ### Resolution mechanism
 
 The operator must resolve every image through a template helper at render time. The helper reads the `RELATED_IMAGE_*` env var when set and otherwise returns the upstream default baked into the manifest. The fallback is required: community and upstream installs (`make deploy`, `dist/rhdh/install.yaml`, Helm) do not set these env vars, and an empty image would break them.
+
+A raw `{{env.RELATED_IMAGE_*}}` placeholder is not sufficient on its own. It has no fallback, so community installs would render an empty image, and the plugin-deps loader does not run the template engine at all today. The helper plus the loader change below solves both problems.
 
 ```yaml
 # Flavour: config/profile/rhdh/default-config/flavours/intelligent-assistant/deployment.yaml
