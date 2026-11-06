@@ -161,7 +161,9 @@ Notes:
 - `operator-sdk generate bundle` derives `spec.relatedImages` from `RELATED_IMAGE_*` env vars found on container specs in the bundle manifests. It does not scan ConfigMap contents, so the env var must be on the operator deployment.
 - operator-sdk normalises names: `RELATED_IMAGE_lightspeed_core` becomes `lightspeed-core`, `RELATED_IMAGE_plugin_installer` becomes `plugin-installer`. The underscore/hyphen difference is expected.
 - Values must be non-empty. An empty env value produces an empty `relatedImages[].image`, which breaks mirroring. CI must reject it.
-- Values must be pinned to a tag or digest. A bare reference such as `registry.access.redhat.com/ubi10-minimal` resolves to `:latest` and drifts between mirror runs; the source-of-truth block above pins `:10.1`. CI must reject untagged entries. The same applies to mutable tags such as `:latest` on other images; digest-pin them where the product pipeline allows.
+- Values must be pinned to a tag or digest. A bare reference such as `registry.access.redhat.com/ubi10-minimal` resolves to `:latest` and drifts between mirror runs; the source-of-truth block above pins `:10.1`. CI must reject untagged entries.
+- The upstream/community defaults in the block above that use `:next` or `:latest` (`backstage`, `postgresql`, `plugin-installer`) intentionally stay floating: that is how upstream builds are consumed, and the downstream pipeline replaces them with digest-pinned product images. The pinning rule therefore applies to product values and to the generated CSV/bundle, not to those three upstream defaults.
+- `:10.1` is a minor-version stream that Red Hat moves on rebuilds, so it can still drift between mirror runs. Use a dated `10.1-<build>` tag or a digest if run-to-run reproducibility is required; the downstream product image should be digest-pinned either way.
 - Use one canonical env var name per image. If the same image appears under two names, operator-sdk emits the image once with an empty name.
 - The sonataflow psql job reuses `RELATED_IMAGE_postgresql` rather than introducing a second PostgreSQL entry. It runs `psql` against the same database operand, so the same product image is appropriate. If a future orchestrator version requires a different client version, it gets its own env var.
 - The Tekton `ubi10-minimal` reference appears in three step images (`flatten`, `build-manifests`, `build-gitops`); all three resolve through the single `RELATED_IMAGE_ubi_minimal` env var.
@@ -171,9 +173,9 @@ Notes:
 
 ### Resolution mechanism
 
-The operator must resolve every image through a template helper at render time. The helper reads the `RELATED_IMAGE_*` env var when set and otherwise returns the upstream default baked into the manifest. The fallback is required: community and upstream installs (`make deploy`, `dist/rhdh/install.yaml`, Helm) do not set these env vars, and an empty image would break them.
+The operator must resolve every image through a template helper at render time. The helper reads the `RELATED_IMAGE_*` env var when set and otherwise returns the upstream default baked into the manifest. The fallback is required for rendering paths that do not run from the operator Deployment: `make run` sets only `OPERATOR_DP_PROCESSING` and `RELATED_IMAGE_plugin_installer`, unit and integration tests construct the model without a Deployment, and custom installs may omit an env var. By contrast, `make deploy` and `dist/rhdh/install.yaml` inherit every variable from `deployment-patch.yaml`, and the Helm chart deploys RHDH directly without the operator, so none of those paths rely on the fallback. An empty image would break any path that does.
 
-A raw `{{env.RELATED_IMAGE_*}}` placeholder is not sufficient on its own. It has no fallback, so community installs would render an empty image, and the plugin-deps loader does not run the template engine at all today. The helper plus the loader change below solves both problems.
+A raw `{{env.RELATED_IMAGE_*}}` placeholder is not sufficient on its own. It has no fallback, so any render without the env var (local runs, tests, custom installs) would produce an empty image, and the plugin-deps loader does not run the template engine at all today. The helper plus the loader change below solves both problems.
 
 ```yaml
 # Flavour: config/profile/rhdh/default-config/flavours/intelligent-assistant/deployment.yaml
@@ -205,7 +207,7 @@ type TemplateData struct {
 }
 
 // relatedImage returns the override when set, otherwise the fallback baked
-// into the manifest, so upstream/community installs keep working.
+// into the manifest, so renders without the env var keep working.
 func relatedImage(name, fallback string) string {
     // name "lightspeed-core" -> RELATED_IMAGE_lightspeed_core
 }
