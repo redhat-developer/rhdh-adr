@@ -39,6 +39,8 @@ Replace the `plugin-deps/` directory mechanism with standard default-config/flav
    - Required labels on all plugin resources:
      - `rhdh.redhat.com/plugin: <plugin-name>` - Plugin identifier
      - `rhdh.redhat.com/ref: <ref-name>` - Dependency reference name
+   - Optional annotation for additional image dependencies:
+     - `rhdh.redhat.com/additional-images: '["image1:tag", "image2:tag"]'` - JSON array of container images not directly visible in manifest (e.g., created by operators from CRs, indirect dependencies)
    - Exact label matching replaces file prefix matching
    - Eliminates ambiguity and prevents accidental matches
 
@@ -107,6 +109,8 @@ metadata:
   labels:
     rhdh.redhat.com/plugin: orchestrator
     rhdh.redhat.com/ref: tekton
+  annotations:
+    rhdh.redhat.com/additional-images: '["quay.io/tekton/operator-controller:v0.68.0"]'
 ```
 
 **Flavour override example:**
@@ -167,6 +171,7 @@ plugins:
 ✅ **Exact matching**: Label-based selection eliminates ambiguity from prefix matching
 ✅ **Template consistency**: Standard Go template syntax across all operator resources
 ✅ **Reduced cognitive load**: One configuration pattern to learn instead of multiple special cases
+✅ **Air-gap support**: Additional images annotation enables automated discovery of indirect dependencies for disconnected environments
 ✅ **Path to catalog-based config**: Opens way to define dependencies in catalog (like plugins), moving plugin configuration ownership out of operator code
 ✅ **Simpler testing**: Single file easier to validate and test than directory of files
 
@@ -189,6 +194,7 @@ plugins:
 - Resource selection: Filter resources by exact label match where `plugin` matches enabled plugin and `ref` is in plugin's dependency list
 - Merge strategy: Later flavours override earlier ones for same (plugin, ref) combination
 - Template context: Full operator template context available (`.Rhdh`, `.Values`, etc.)
+- Additional images: Optional `rhdh.redhat.com/additional-images` annotation declares container images not directly visible in manifests (e.g., created by operators from CRs). Used for air-gap image discovery (see ADR-012).
 
 **Future considerations:**
 - Catalog-based dependency definition: Move dependency specifications from operator code to catalog entries, same way as for other part of plugin
