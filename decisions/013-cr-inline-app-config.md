@@ -19,19 +19,19 @@ This creates a gap between "simple configuration" (should be inline) and "comple
 
 ## Decision
 
-Introduce **`spec.application.appConfig.raw`**: a field for defining application configuration as a YAML fragment directly in the Backstage CR spec.
+Introduce **`spec.application.appConfig.inline`**: a field for defining application configuration as a YAML fragment directly in the Backstage CR spec.
 
 **Implementation approach**:
 
-- Add `raw` field to `spec.application.appConfig` accepting a YAML string with app-config content
-- `raw` inline config is merged **after** ConfigMaps by default, establishing a predictable merge order
-- ConfigMaps can optionally specify `injectionOrder: post-spec` to be merged **after** the `raw` config
-- Without `injectionOrder: post-spec`, ConfigMaps are merged **before** `raw` config, in their definition order
+- Add `inline` field to `spec.application.appConfig` accepting a YAML string with app-config content (unstructured, since app-config schema in Backstage is dynamic and plugin-driven)
+- `inline` config is merged **after** ConfigMaps by default, establishing a predictable merge order
+- ConfigMaps can optionally specify `injectionOrder: post-spec` to be merged **after** the `inline` config
+- Without `injectionOrder: post-spec`, ConfigMaps are merged **before** `inline` config, in their definition order
 
 **Merge order**:
 ```
 1. ConfigMaps (without injectionOrder: post-spec) in definition order
-2. spec.application.appConfig.raw
+2. spec.application.appConfig.inline
 3. ConfigMaps (with injectionOrder: post-spec) in definition order
 ```
 
@@ -45,13 +45,13 @@ spec:
         - name: post-config-1
           injectionOrder: post-spec
         - name: pre-config-2
-      raw: |
+      inline: |
         backend:
           database:
             client: 'pg'
 ```
 
-Merge order: `pre-config-1` → `pre-config-2` → `raw` → `post-config-1`
+Merge order: `pre-config-1` → `pre-config-2` → `inline` → `post-config-1`
 
 ## Alternatives Considered
 
@@ -60,7 +60,7 @@ Merge order: `pre-config-1` → `pre-config-2` → `raw` → `post-config-1`
 - **Rejected because**: ConfigMaps are essential for large configs, secret management integration, and multi-instance sharing. Removing them would break existing workflows and force large configurations into CRs.
 
 ### Alternative 2: Simpler model - inline config always wins (no post-spec)
-- **Approach**: `raw` config is always merged last, no option for post-spec ConfigMaps
+- **Approach**: `inline` config is always merged last, no option for post-spec ConfigMaps
 - **Rejected because**: Some use cases need to override inline spec config (e.g., templated operators, multi-tenancy overlays). Post-spec merging provides necessary flexibility while remaining understandable.
 
 ## Consequences
@@ -73,7 +73,7 @@ Merge order: `pre-config-1` → `pre-config-2` → `raw` → `post-config-1`
 ✅ Reduces operator memory footprint - fewer ConfigMaps to watch means smaller informer cache
 
 ### Negative
-❌ Increases CR size if users embed large configurations (ConfigMaps remain better choice for large configs)
+❌ Increases CR size if users embed large configurations (ConfigMaps remain better choice for large configs; etcd has a hard limit of 1.5 MB for a single resource)
 ❌ Two-level merge semantics (pre-spec, post-spec) adds conceptual complexity vs. simple linear ordering
 
 ### Neutral
