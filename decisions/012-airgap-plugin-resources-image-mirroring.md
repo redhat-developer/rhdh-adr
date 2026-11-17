@@ -30,7 +30,7 @@ In disconnected clusters, plugins deploy runtime dependencies as container image
 2. **Generate plugin dependency image list** from deployed operator
    - Read `plugin-resources.yaml` from operator ConfigMaps or container (see ADR-011)
    - Extract all `image:` references from manifests (manual or via script)
-   - Manually add any hidden dependencies (CRs that create containers, indirect dependencies)
+   - Extract additional images from `rhdh.redhat.com/additional-images` annotation (see ADR-011) - covers indirect dependencies like operator-created containers from CRs
    - **For OpenShift**: Create `ImageSetConfiguration` YAML listing all plugin dependency images
    - **For Kubernetes**: Create two files:
      - Plain image list (text file with image URLs) for skopeo mirroring
@@ -72,6 +72,7 @@ In disconnected clusters, plugins deploy runtime dependencies as container image
 - ✅ Reuses standard OpenShift tooling (oc-mirror, IDMS/ITMS) - no RHDH-specific implementation
 - ✅ Runtime-level redirection for maximum reliability
 - ✅ Consistent configuration format across both platforms
+- ✅ Automated discovery of additional images via annotation (ADR-011) - plugin owners declare indirect dependencies, no manual intervention needed
 
 ### Negative
 - ❌ Requires cluster-admin and node access on both platforms
@@ -80,7 +81,7 @@ In disconnected clusters, plugins deploy runtime dependencies as container image
 - ❌ No HyperShift support in this ADR
 
 ### Neutral
-- ⚖️ Helper script for dependency discovery can be automated but manual extraction also works
+- ⚖️ Helper script for image extraction recommended but manual parsing also works
 - ⚖️ Further automation for Kubernetes resolving (DaemonSet as an option) can be added in future ADR
 
 ## Notes
@@ -93,5 +94,6 @@ In disconnected clusters, plugins deploy runtime dependencies as container image
 
 ## References
 
+- ADR-011: Plugin Resources Standard Configuration Pattern (defines `rhdh.redhat.com/additional-images` annotation)
 - OpenShift disconnected docs: https://docs.openshift.com/container-platform/latest/installing/disconnected_install/
 - oc-mirror: https://docs.openshift.com/container-platform/latest/installing/disconnected_install/installing-mirroring-disconnected.html
