@@ -59,8 +59,7 @@ and 2.1 using each release's actual image references.
   ConfigMaps).
 - **Deferred for separate design work because**: These address a broader problem —
   clusters where node-level mirror configuration is unavailable — and must consider
-  dynamic plugin ownership. The per-installation plugin-dependency part of that
-  space is covered by ADR-12. They are not rejected outright.
+  dynamic plugin ownership.
 
 ## Consequences
 
@@ -72,7 +71,7 @@ and 2.1 using each release's actual image references.
 ### Negative
 
 - ❌ `oc-mirror` mirrors all related images, including optional dependencies such as
-  OKP (10+ GB), even when their flavour is disabled. Individual related images
+  OKP, even when their flavour is disabled. Individual related images
   cannot currently be excluded; optional-image support is tracked in
   [OCPSTRAT-3755](https://redhat.atlassian.net/browse/OCPSTRAT-3755).
 - ❌ Maintainers must keep the CSV list aligned with the shipped manifests. Product
