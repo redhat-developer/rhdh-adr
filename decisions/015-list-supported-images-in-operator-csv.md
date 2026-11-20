@@ -16,9 +16,7 @@ references in workload manifests.
 ## Decision
 
 **Add the known container images used by the RHDH profile's supported flavours and
-plugin dependencies directly to the CSV's `spec.relatedImages`.** This is the
-limited fix agreed in the 12 November 2026 Install team discussion, not a general
-solution for dynamic plugin images or every disconnected platform.
+plugin dependencies directly to the CSV's `spec.relatedImages`.**
 
 | CSV image name | Used by | Change |
 |----------------|---------|--------|
@@ -38,18 +36,12 @@ solution for dynamic plugin images or every disconnected platform.
   variable implies that the operator consumes an override, which this fix does
   not implement. Existing RHDH and PostgreSQL overrides remain unchanged.
 - Do **not** change templates, reconciliation, or workload image defaults.
-- Keep `plugin-installer` excluded while it is Dev Preview, as decided in
-  [rhdh-operator#3701](https://github.com/redhat-developer/rhdh-operator/pull/3701).
-  Users enabling that feature still mirror and configure its image separately.
+- Keep `plugin-installer` excluded while it is Dev Preview.
 
 The workflow is: run `oc-mirror` for the RHDH operator, apply the generated cluster
 mirror configuration, then install RHDH. This fix applies only where that mirror
 configuration can be used. The same CSV-only approach can be backported to 1.10
-and 2.1 using each release's actual image references; it sets no release date.
-
-This list is limited to the small, fixed set of images the RHDH profile ships by
-default. Per-installation plugin-dependency images are a separate problem, decided
-in [ADR-12: Airgap Plugin Resources Image Mirroring](https://github.com/redhat-developer/rhdh-adr/pull/34).
+and 2.1 using each release's actual image references.
 
 ## Alternatives Considered
 
