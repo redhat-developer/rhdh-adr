@@ -24,10 +24,12 @@ solution for dynamic plugin images or every disconnected platform.
 |----------------|---------|--------|
 | `backstage` | RHDH application | Already listed |
 | `postgresql` | Local database and SonataFlow PostgreSQL client job | Already listed; no duplicate entry needed |
-| `lightspeed-core` | Intelligent Assistant flavour | Add |
+| `flavour-intelligent-assistant-lightspeed-core` | Intelligent Assistant flavour | Add |
 | `plugin-dep-okp` | Optional Intelligent Assistant OKP dependency | Add |
-| `ubi-minimal` | Tekton dependency tasks | Add |
-| `tekton-git` | Tekton `git-cli` task's default image | Add |
+| `plugin-dep-tekton-ubi-minimal` | Tekton dependency tasks | Add |
+| `plugin-dep-tekton-git` | Tekton `git-cli` task's default image | Add |
+
+**Implementation approach**:
 
 - Declare the additional entries in the **base CSV**, and ensure `make bundle`
   preserves them in the generated bundle. Their references must match the images
@@ -45,34 +47,58 @@ mirror configuration, then install RHDH. This fix applies only where that mirror
 configuration can be used. The same CSV-only approach can be backported to 1.10
 and 2.1 using each release's actual image references; it sets no release date.
 
+This list is limited to the small, fixed set of images the RHDH profile ships by
+default. Per-installation plugin-dependency images are a separate problem, decided
+in [ADR-12: Airgap Plugin Resources Image Mirroring](https://github.com/redhat-developer/rhdh-adr/pull/34).
+
 ## Alternatives Considered
 
-- **Documentation-only image lists** leave customers with a separate discovery
-  step and do not make the images discoverable through the operator bundle.
-- **Runtime image overrides, template helpers, or ConfigMap-based resolution**
-  address a broader problem. They are deferred for separate design work, not
-  rejected by this decision. That work must consider dynamic plugin ownership
-  and clusters where node-level mirror configuration is unavailable.
+### Alternative 1: Documentation-only image lists
+
+- **Approach**: Document the missing images in the disconnected-installation guide
+  instead of listing them in the CSV.
+- **Rejected because**: Customers keep a separate, manual discovery step, and the
+  images remain undiscoverable through the operator bundle.
+
+### Alternative 2: Runtime image overrides, template helpers, or ConfigMap-based resolution
+
+- **Approach**: Let the operator resolve or rewrite image references at
+  reconciliation time (`RELATED_IMAGE_*` overrides, template helpers, or mirror
+  ConfigMaps).
+- **Deferred for separate design work because**: These address a broader problem —
+  clusters where node-level mirror configuration is unavailable — and must consider
+  dynamic plugin ownership. The per-installation plugin-dependency part of that
+  space is covered by ADR-12. They are not rejected outright.
 
 ## Consequences
 
-- Standard `oc-mirror` discovery covers the known supported container images
+### Positive
+
+- ✅ Standard `oc-mirror` discovery covers the known supported container images
   listed above without changing operator runtime behaviour.
-- `oc-mirror` mirrors all related images, including optional dependencies such as
+
+### Negative
+
+- ❌ `oc-mirror` mirrors all related images, including optional dependencies such as
   OKP (10+ GB), even when their flavour is disabled. Individual related images
   cannot currently be excluded; optional-image support is tracked in
   [OCPSTRAT-3755](https://redhat.atlassian.net/browse/OCPSTRAT-3755).
-- Maintainers must keep the CSV list aligned with the shipped manifests. Product
+- ❌ Maintainers must keep the CSV list aligned with the shipped manifests. Product
   bundles must use trusted, digest-pinned images and pass downstream Conforma
   validation before release.
-- This does not add overrides for the newly listed images or solve disconnected
+
+### Neutral
+
+- ⚖️ This does not add overrides for the newly listed images or solve disconnected
   installs where IDMS/ITMS cannot be used. Dynamic plugin OCI artifacts, custom
   plugin dependencies, images owned by other operators, runtime downloads, Helm,
-  and changes to the existing mirroring script remain out of scope.
+  and changes to the existing mirroring script remain out of scope; ADR-12 handles
+  the per-installation plugin-dependency images.
 
 ## References
 
 - [Feature request: RHDHPLAN-1887](https://redhat.atlassian.net/browse/RHDHPLAN-1887)
 - [Implementation: rhdh-operator#4023](https://github.com/redhat-developer/rhdh-operator/pull/4023)
+- [ADR-12: Airgap Plugin Resources Image Mirroring](https://github.com/redhat-developer/rhdh-adr/pull/34)
 - [RHDH base CSV](https://github.com/redhat-developer/rhdh-operator/blob/main/config/manifests/rhdh/bases/backstage-operator.clusterserviceversion.yaml)
 - [RHDH flavour and dependency manifests](https://github.com/redhat-developer/rhdh-operator/tree/main/config/profile/rhdh)
