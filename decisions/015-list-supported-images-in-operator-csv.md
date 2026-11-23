@@ -25,7 +25,6 @@ plugin dependencies directly to the CSV's `spec.relatedImages`.**
 | `flavour-intelligent-assistant-lightspeed-core` | Intelligent Assistant flavour | Add |
 | `plugin-dep-okp` | Optional Intelligent Assistant OKP dependency | Add |
 | `plugin-dep-tekton-ubi-minimal` | Tekton dependency tasks | Add |
-| `plugin-dep-tekton-git` | Tekton `git-cli` task's default image | Add |
 
 **Implementation approach**:
 
@@ -37,6 +36,12 @@ plugin dependencies directly to the CSV's `spec.relatedImages`.**
   not implement. Existing RHDH and PostgreSQL overrides remain unchanged.
 - Do **not** change templates, reconciliation, or workload image defaults.
 - Keep `plugin-installer` excluded while it is Dev Preview.
+- Keep the Tekton `git-cli` task's default image excluded. It is marked for
+  deprecation in
+  [tekton.yaml](https://github.com/redhat-developer/rhdh-operator/blob/main/config/profile/rhdh/plugin-deps/tekton.yaml),
+  would likely fail downstream Conforma validation, and would commit the bundle
+  to mirroring an image that will eventually be dropped. Customers who use the
+  `git-cli` task in a disconnected environment mirror it manually.
 
 The workflow is: run `oc-mirror` for the RHDH operator, apply the generated cluster
 mirror configuration, then install RHDH. This fix applies only where that mirror
