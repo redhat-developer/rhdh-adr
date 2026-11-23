@@ -2,16 +2,18 @@
 
 ## Context
 
-**Problem**: `oc-mirror` discovers an operator's dependency images from the CSV's
+**Problem**: `oc-mirror v2` discovers an operator's dependency images from the
+published file-based catalog's bundle metadata, populated from the CSV's
 `spec.relatedImages`. The RHDH bundle currently lists RHDH and PostgreSQL, but omits
-container images referenced by its supported flavours and plugin dependencies.
+container images referenced by its shipped flavours and plugin dependencies.
 Customers must discover and mirror those missing images separately.
 
-For OpenShift clusters with working `ImageDigestMirrorSet` / `ImageTagMirrorSet`
-(IDMS/ITMS) configuration, listing the missing images is enough to enable the
-standard bundle-based mirroring workflow. The container runtime redirects image
-pulls to the mirror; neither OLM nor the RHDH Operator needs to rewrite image
-references in workload manifests.
+This decision fixes discovery of the listed images, not the full disconnected
+installation path. Image pulls must be checked separately: `ImageTagMirrorSet`
+(ITMS) redirects tag pulls, while `ImageDigestMirrorSet` (IDMS) redirects digest
+pulls. The container runtime applies those rules without rewriting workload
+manifests. Pinning a CSV entry to a digest does not change a workload's tag pull
+into a digest pull.
 
 ## Decision
 
@@ -29,14 +31,15 @@ plugin dependencies directly to the CSV's `spec.relatedImages`.**
 **Implementation approach**:
 
 - Declare the additional entries in the **base CSV**, and ensure `make bundle`
-  preserves them in the generated bundle. Their references must match the images
-  already used by that release's flavour and dependency manifests.
-- Do **not** add environment variables for these entries. OLM exposes every
-  operator Deployment environment variable through the Subscription's
-  `spec.config.env`, a supported override interface, so a `RELATED_IMAGE_*`
-  variable the operator does not consume would be an override that silently
-  does nothing. Consumption is deferred to the runtime-resolution design
-  (Alternative 2). Existing RHDH and PostgreSQL overrides remain unchanged.
+  preserves them in the generated bundle and catalog publication carries them
+  into the matching bundle's metadata. Use release-specific references and record
+  any mismatch with workload references as a separate runtime gap.
+- Do **not** add environment variables solely for discovery: `oc-mirror v2` does
+  not require matching `RELATED_IMAGE_*` variables. A Subscription can set
+  variables through [`spec.config.env`](https://github.com/operator-framework/operator-lifecycle-manager/blob/master/doc/design/subscription-config.md#env),
+  but they only change deployed images if the operator consumes them. Working
+  overrides are deferred to the runtime-resolution design (Alternative 2).
+  Existing RHDH and PostgreSQL overrides remain unchanged.
 - Do **not** change templates, reconciliation, or workload image defaults.
 - Keep `plugin-installer` excluded while it is Dev Preview.
 - Keep the Tekton `git-cli` task's default image excluded. It is marked for
@@ -46,10 +49,22 @@ plugin dependencies directly to the CSV's `spec.relatedImages`.**
   to mirroring an image that will eventually be dropped. Customers who use the
   `git-cli` task in a disconnected environment mirror it manually.
 
-The workflow is: run `oc-mirror` for the RHDH operator, apply the generated cluster
-mirror configuration, then install RHDH. This fix applies only where that mirror
-configuration can be used. The same CSV-only approach can be backported to 1.10
-and 2.1 using each release's actual image references.
+The same discovery-only approach can be backported to 1.10 and 2.1 using each
+release's image references. Successful discovery does not prove that those
+releases' workloads can pull from a mirror.
+
+### Validation
+
+- Regenerate and validate the bundles with `make bundles build-installers` in the
+  operator repository, and check that the listed entries remain in the RHDH CSV.
+- Inspect the published file-based catalog's matching bundle metadata for those
+  entries, then verify that `oc-mirror v2` mirrors them.
+- Test workload pulls separately in a disconnected install. Use ITMS for tag
+  pulls and IDMS for digest pulls, and verify that the mirror serves the exact
+  references the workloads request, without falling back to the source registry.
+
+Record catalog-discovery and workload-pull results separately; bundle generation
+alone does not establish either result.
 
 ## Alternatives Considered
 
@@ -73,7 +88,7 @@ and 2.1 using each release's actual image references.
 
 ### Positive
 
-- ✅ Standard `oc-mirror` discovery covers the known supported container images
+- ✅ Standard `oc-mirror v2` discovery covers the known shipped container images
   listed above without changing operator runtime behaviour.
 
 ### Negative
@@ -85,6 +100,11 @@ and 2.1 using each release's actual image references.
 - ❌ Maintainers must keep the CSV list aligned with the shipped manifests. Product
   bundles must use trusted, digest-pinned images and pass downstream Conforma
   validation before release.
+- ❌ The CSV lists `registry.access.redhat.com/ubi10-minimal:10.1`, but the current
+  Tekton tasks request the same repository without a tag, meaning `:latest`.
+  Mirroring `:10.1` alone does not satisfy those pulls. Aligning the task references
+  and mirror content is separate runtime work; this decision does not establish
+  disconnected Tekton support.
 - ❌ The list covers only the known, shipped set. A CI guard can fail a release
   that adds a static image without a matching CSV entry — before release, not on
   user deployment — but dynamic dependencies still require manual actualisation,
@@ -92,6 +112,11 @@ and 2.1 using each release's actual image references.
 
 ### Neutral
 
+- ⚖️ This is not a claim of full disconnected support. The
+  [Operator authoring guide, section 5.6.4](https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/operators/developing-operators)
+  lists replacing hard-coded image references with environment variables and
+  using digests as requirements for disconnected support. Those requirements are
+  distinct from making images discoverable in the catalog.
 - ⚖️ This does not add overrides for the newly listed images or solve disconnected
   installs where IDMS/ITMS cannot be used. Dynamic plugin OCI artifacts, custom
   plugin dependencies, images owned by other operators, runtime downloads, Helm,
