@@ -59,7 +59,9 @@ Replace the `plugin-deps/` directory mechanism with standard default-config/flav
    - Load resources from enabled flavours
    - Filter by exact label match: where `plugin` label matches enabled plugin and `ref` label is in plugin's dependency list
    - Apply matched resources
-   - **Merge semantics**: If multiple resources exist with the same `(plugin, ref)` combination, last one wins (no internal merge)
+   - **Merge semantics**:
+     - Resources: If multiple resources exist with the same `(plugin, ref)` combination, last one wins (no internal merge)
+     - Dependencies list: Existing behavior unchanged - not defined means inherit, `dependencies: []` means clear
 
 **Example transformation:**
 
