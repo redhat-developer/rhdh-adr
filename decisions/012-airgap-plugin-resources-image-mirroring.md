@@ -33,7 +33,7 @@ In disconnected clusters, plugins deploy runtime dependencies as container image
    - Extract additional images from `rhdh.redhat.com/additional-images` annotation (see ADR-011) - covers indirect dependencies like operator-created containers from CRs
    - **For OpenShift**: Create `ImageSetConfiguration` YAML listing all plugin dependency images
    - **For Kubernetes**: Create three files:
-     - Plain image list (text file with image URLs) for skopeo mirroring
+     - Plain image list (`${IMAGE_LIST}` - text file with image URLs) for skopeo mirroring
      - `config.toml` configuration defining mirror mappings (for containerd - most common runtime)
      - `registries.conf` configuration defining mirror mappings (for CRI-O - alternative runtime, not a priority, can be implemented later)
 
@@ -42,7 +42,15 @@ In disconnected clusters, plugins deploy runtime dependencies as container image
      - Run `oc-mirror --config <ImageSetConfiguration>` → mirrors images and generates IDMS/ITMS YAML files
      - Apply generated IDMS/ITMS: `oc apply -f <generated-idms.yaml>` (requires cluster-admin)
    - **Kubernetes**:
-     - Run `skopeo copy` for each image in the plain image list
+     - Run `skopeo copy` for each image in the plain image list (example script for registries not requiring auth):
+       ```bash
+       while IFS= read -r image; do
+         skopeo copy \
+           "docker://${image}" \
+           "docker://${DEST_REGISTRY}/${image#*/}" \
+           --dest-tls-verify=false
+       done < "${IMAGE_LIST}"
+       ```
      - Apply the appropriate config file for your container runtime on each cluster node (requires cluster-admin/node access):
        - **containerd** (most common): Apply `config.toml` to `/etc/containerd/config.toml`
        - **CRI-O** (alternative): Apply `registries.conf` to `/etc/containers/registries.conf` (or `/etc/containers/registries.conf.d/`)
