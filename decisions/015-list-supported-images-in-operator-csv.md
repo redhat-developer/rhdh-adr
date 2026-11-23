@@ -28,12 +28,14 @@ plugin dependencies directly to the CSV's `spec.relatedImages`.**
 
 **Implementation approach**:
 
-- Declare the additional entries in the **base CSV**, and ensure `make bundle`
-  preserves them in the generated bundle. Their references must match the images
+- Declare each image as a standard `RELATED_IMAGE_*` environment variable on the
+  operator deployment, so `make bundle` derives `spec.relatedImages` from them
+  (the standard operator-sdk flow). Their references must match the images
   already used by that release's flavour and dependency manifests.
-- Do **not** add environment variables for these entries. A `RELATED_IMAGE_*`
-  variable implies that the operator consumes an override, which this fix does
-  not implement. Existing RHDH and PostgreSQL overrides remain unchanged.
+- These variables are internal plumbing, not a supported interface. They are not
+  documented as user-facing overrides, and the operator does not consume them:
+  flavour and plugin-dependency images have no override path. Only the existing
+  RHDH and PostgreSQL overrides are documented and consumed.
 - Do **not** change templates, reconciliation, or workload image defaults.
 - Keep `plugin-installer` excluded while it is Dev Preview.
 - Keep the Tekton `git-cli` task's default image excluded. It is marked for
@@ -82,6 +84,10 @@ and 2.1 using each release's actual image references.
 - ❌ Maintainers must keep the CSV list aligned with the shipped manifests. Product
   bundles must use trusted, digest-pinned images and pass downstream Conforma
   validation before release.
+- ❌ The list covers only the known, shipped set. A CI guard can fail a release
+  that adds a static image without a matching CSV entry — before release, not on
+  user deployment — but dynamic dependencies still require manual actualisation,
+  and user-added plugins are out of scope entirely.
 
 ### Neutral
 
