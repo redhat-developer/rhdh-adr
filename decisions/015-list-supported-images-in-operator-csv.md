@@ -28,14 +28,15 @@ plugin dependencies directly to the CSV's `spec.relatedImages`.**
 
 **Implementation approach**:
 
-- Declare each image as a standard `RELATED_IMAGE_*` environment variable on the
-  operator deployment, so `make bundle` derives `spec.relatedImages` from them
-  (the standard operator-sdk flow). Their references must match the images
+- Declare the additional entries in the **base CSV**, and ensure `make bundle`
+  preserves them in the generated bundle. Their references must match the images
   already used by that release's flavour and dependency manifests.
-- These variables are internal plumbing, not a supported interface. They are not
-  documented as user-facing overrides, and the operator does not consume them:
-  flavour and plugin-dependency images have no override path. Only the existing
-  RHDH and PostgreSQL overrides are documented and consumed.
+- Do **not** add environment variables for these entries. OLM exposes every
+  operator Deployment environment variable through the Subscription's
+  `spec.config.env`, a supported override interface, so a `RELATED_IMAGE_*`
+  variable the operator does not consume would be an override that silently
+  does nothing. Consumption is deferred to the runtime-resolution design
+  (Alternative 2). Existing RHDH and PostgreSQL overrides remain unchanged.
 - Do **not** change templates, reconciliation, or workload image defaults.
 - Keep `plugin-installer` excluded while it is Dev Preview.
 - Keep the Tekton `git-cli` task's default image excluded. It is marked for
